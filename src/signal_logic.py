@@ -1,9 +1,46 @@
 import pandas as pd
 import pandas_ta as ta
+import requests
+import logging
+from src.config import config
+
+logger = logging.getLogger(__name__)
 
 class SignalEngine:
     def __init__(self):
-        pass
+        self.ai_url = config.AI_API_URL
+
+    def get_ai_prediction(self, symbol: str, df: pd.DataFrame) -> float:
+        """
+        Sends historical data to the Colab AI API to get the predicted next close price.
+        Returns the predicted close price. If it fails, returns None.
+        """
+        if not self.ai_url:
+            return None
+
+        try:
+            # We send the last 400 candles to the AI
+            lookback_df = df.tail(400).copy()
+            # Ensure 'timestamp' column is correctly formatted as string
+            lookback_df['timestamp'] = lookback_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+            payload = {
+                "symbol": symbol,
+                "lookback_data": lookback_df[['timestamp', 'open', 'high', 'low', 'close', 'volume']].to_dict('records'),
+                "pred_len": 1
+            }
+
+            url = f"{self.ai_url}/predict"
+            response = requests.post(url, json=payload, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+            predicted_close = data.get("predicted_close")
+            logger.info(f"AI Prediction for {symbol}: {predicted_close}")
+            return predicted_close
+        except Exception as e:
+            logger.error(f"Failed to fetch AI prediction (fallback to traditional): {e}")
+            return None
 
     def calculate_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -21,10 +58,11 @@ class SignalEngine:
 
         return df
 
-    def check_tier_1_signal(self, df: pd.DataFrame) -> bool:
+    def check_tier_1_signal(self, symbol: str, df: pd.DataFrame) -> bool:
         """
         Checks if conditions for Tier 1 entry are met.
         Condition: 15m RSI < 30 OR Price touches/crosses lower Bollinger Band.
+        AI Enhancement: If the AI is configured, it will require the predicted close price to be higher than the current close.
         """
         if df.empty or len(df) < 20:
             return False
@@ -45,10 +83,24 @@ class SignalEngine:
         if pd.isna(rsi_val) or pd.isna(bbl_val):
             return False
 
-        if rsi_val < 30 or close_val <= bbl_val:
-            return True
+        traditional_signal = (rsi_val < 30 or close_val <= bbl_val)
 
-        return False
+        if not traditional_signal:
+            return False
+
+        # Traditional signal triggered. Now query AI to act as a filter if available.
+        predicted_close = self.get_ai_prediction(symbol, df)
+        if predicted_close is not None:
+            # AI is active. Only buy if the AI predicts the price will go up.
+            if predicted_close > close_val:
+                logger.info(f"Tier 1 AI confirmation passed: Predicted {predicted_close} > Current {close_val}")
+                return True
+            else:
+                logger.info(f"Tier 1 AI confirmation failed: Predicted {predicted_close} <= Current {close_val}. Skipping trade.")
+                return False
+
+        # If AI is not active or failed, trust the traditional signal.
+        return True
 
     def check_tier_2_signal(self, current_price: float, avg_entry_price: float, drop_pct: float, df: pd.DataFrame) -> bool:
         """

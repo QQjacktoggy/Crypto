@@ -103,7 +103,7 @@ class LiveEngine:
                 df = self.fetch_data_df(symbol)
                 df = self.signal_engine.calculate_indicators(df)
 
-                if self.signal_engine.check_tier_1_signal(df):
+                if self.signal_engine.check_tier_1_signal(symbol, df):
                     logger.info(f"Tier 1 signal detected for {symbol}")
                     self.execute_buy(symbol, config.TIER_1_AMOUNT, 1)
                     break # Stop scanning, we have an active trade (MAX_ACTIVE_TRADES = 1)

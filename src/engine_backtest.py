@@ -157,7 +157,7 @@ class BacktestEngine:
                 continue
 
             if not self.active_position:
-                if self.signal_engine.check_tier_1_signal(current_df):
+                if self.signal_engine.check_tier_1_signal(self.symbol, current_df):
                     # Simulate slippage on market order (+0.05%)
                     exec_price = current_price * 1.0005
                     self.execute_buy(config.TIER_1_AMOUNT, exec_price, timestamp, 1)
