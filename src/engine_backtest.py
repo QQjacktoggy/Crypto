@@ -13,7 +13,8 @@ class BacktestEngine:
     def __init__(self, symbol='BTC/USDT', days=365):
         self.symbol = symbol
         self.days = days
-        self.exchange = ccxt.binance({'enableRateLimit': True})
+        # Using okx for backtesting data to avoid regional restrictions
+        self.exchange = ccxt.okx({'enableRateLimit': True})
         self.signal_engine = SignalEngine()
         self.data_path = f"data/{symbol.replace('/', '_')}_{days}d_15m.csv"
 
