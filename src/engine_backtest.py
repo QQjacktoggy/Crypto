@@ -71,43 +71,54 @@ class BacktestEngine:
         pos = self.positions.get(symbol)
         if not pos or pos['amount'] == 0:
             return 0.0
-        return pos['cost_usdt'] / pos['amount']
+        return pos['notional_usdt'] / pos['amount']
 
-    def execute_buy(self, symbol, amount_usdt, price, timestamp, tier):
-        amount = amount_usdt / price
-        fee = amount_usdt * config.FEE_RATE
+    def execute_order(self, symbol, margin_usdt, price, timestamp, tier, direction):
+        position_value_usdt = margin_usdt * config.LEVERAGE
+        amount = position_value_usdt / price
+        fee = position_value_usdt * config.FEE_RATE
 
         if symbol not in self.positions:
-            self.positions[symbol] = {'tier': 0, 'amount': 0.0, 'cost_usdt': 0.0, 'fees_usdt': 0.0}
+            self.positions[symbol] = {
+                'tier': 0, 'direction': direction, 'amount': 0.0,
+                'margin_usdt': 0.0, 'notional_usdt': 0.0, 'fees_usdt': 0.0
+            }
 
         pos = self.positions[symbol]
         pos['tier'] = tier
         pos['amount'] += amount
-        pos['cost_usdt'] += amount_usdt
+        pos['margin_usdt'] += margin_usdt
+        pos['notional_usdt'] += position_value_usdt
         pos['fees_usdt'] += fee
 
-        # Calculate current margin usage across all positions
-        current_margin = sum(p['cost_usdt'] for p in self.positions.values())
+        current_margin = sum(p['margin_usdt'] for p in self.positions.values())
         if current_margin > self.max_margin_usage:
             self.max_margin_usage = current_margin
 
-        self.current_balance -= (amount_usdt + fee)
+        # Deduct margin and fee from balance
+        self.current_balance -= (margin_usdt + fee)
 
         self.trades.append({
-            'time': timestamp, 'symbol': symbol, 'type': 'buy', 'tier': tier,
-            'price': price, 'amount': amount, 'cost': amount_usdt, 'fee': fee
+            'time': timestamp, 'symbol': symbol, 'type': 'open', 'tier': tier, 'direction': direction,
+            'price': price, 'amount': amount, 'margin': margin_usdt, 'notional': position_value_usdt, 'fee': fee
         })
 
     def close_position(self, symbol, price, timestamp, is_tp=True):
         pos = self.positions.get(symbol)
         if not pos: return
 
-        revenue = pos['amount'] * price
-        fee = revenue * config.FEE_RATE
-        net_revenue = revenue - fee
+        current_notional = pos['amount'] * price
+        fee = current_notional * config.FEE_RATE
 
-        pnl = net_revenue - pos['cost_usdt'] - pos['fees_usdt']
-        self.current_balance += net_revenue
+        if pos['direction'] == 'long':
+            gross_pnl = current_notional - pos['notional_usdt']
+        else:
+            gross_pnl = pos['notional_usdt'] - current_notional
+
+        pnl = gross_pnl - pos['fees_usdt'] - fee
+
+        # Return margin + gross_pnl - exit_fee
+        self.current_balance += (pos['margin_usdt'] + gross_pnl - fee)
 
         if self.current_balance > self.max_balance:
             self.max_balance = self.current_balance
@@ -116,22 +127,29 @@ class BacktestEngine:
             self.max_drawdown = drawdown
 
         self.trades.append({
-            'time': timestamp, 'symbol': symbol, 'type': 'sell', 'reason': 'TP' if is_tp else 'SL',
-            'price': price, 'amount': pos['amount'], 'revenue': revenue, 'fee': fee, 'pnl': pnl
+            'time': timestamp, 'symbol': symbol, 'type': 'close', 'reason': 'TP' if is_tp else 'SL',
+            'price': price, 'amount': pos['amount'], 'fee': fee, 'pnl': pnl
         })
 
         del self.positions[symbol]
 
         if not is_tp:
-            self.cooldown_symbols[symbol] = True
+            self.cooldown_symbols[symbol] = pos['direction']
 
     def calculate_pnl(self, symbol, current_price):
         pos = self.positions.get(symbol)
         if not pos or pos['amount'] == 0:
             return 0.0
-        current_value = pos['amount'] * current_price
-        estimated_exit_fee = current_value * config.FEE_RATE
-        net_pnl = current_value - pos['cost_usdt'] - pos['fees_usdt'] - estimated_exit_fee
+
+        current_notional = pos['amount'] * current_price
+        estimated_exit_fee = current_notional * config.FEE_RATE
+
+        if pos['direction'] == 'long':
+            gross_pnl = current_notional - pos['notional_usdt']
+        else:
+            gross_pnl = pos['notional_usdt'] - current_notional
+
+        net_pnl = gross_pnl - pos['fees_usdt'] - estimated_exit_fee
         return net_pnl
 
     def run(self):
@@ -168,9 +186,9 @@ class BacktestEngine:
 
             # 1. Cooldown Check
             symbols_to_remove_cooldown = []
-            for symbol in self.cooldown_symbols.keys():
+            for symbol, direction in self.cooldown_symbols.items():
                 df_slice = indicators[symbol].loc[:timestamp]
-                if self.signal_engine.evaluate_cooldown(df_slice):
+                if self.signal_engine.evaluate_cooldown(df_slice, direction):
                     symbols_to_remove_cooldown.append(symbol)
             for symbol in symbols_to_remove_cooldown:
                 del self.cooldown_symbols[symbol]
@@ -179,18 +197,28 @@ class BacktestEngine:
             for symbol in list(self.positions.keys()):
                 row = indicators[symbol].loc[timestamp]
                 current_price = row['close']
+                pos = self.positions[symbol]
+                direction = pos['direction']
 
-                # Check SL using Low
-                sl_pnl = self.calculate_pnl(symbol, row['low'])
+                # Check SL and TP (using appropriate high/low based on direction)
+                if direction == 'long':
+                    # Longs suffer on Lows, profit on Highs
+                    worst_price = row['low']
+                    best_price = row['high']
+                else:
+                    # Shorts suffer on Highs, profit on Lows
+                    worst_price = row['high']
+                    best_price = row['low']
+
+                sl_pnl = self.calculate_pnl(symbol, worst_price)
                 if sl_pnl <= config.SL_MAX_LOSS:
-                    exec_price = row['low'] * 0.9995 # slippage
+                    exec_price = worst_price * (0.9995 if direction == 'long' else 1.0005) # slippage
                     self.close_position(symbol, exec_price, timestamp, is_tp=False)
                     continue
 
-                # Check TP using High
-                tp_pnl = self.calculate_pnl(symbol, row['high'])
+                tp_pnl = self.calculate_pnl(symbol, best_price)
                 if tp_pnl >= config.TP_NET_PROFIT:
-                    exec_price = row['high'] * 0.9995 # slippage
+                    exec_price = best_price * (0.9995 if direction == 'long' else 1.0005) # slippage
                     self.close_position(symbol, exec_price, timestamp, is_tp=True)
                     continue
 
@@ -201,13 +229,13 @@ class BacktestEngine:
                     df_slice = indicators[symbol].loc[:timestamp]
 
                     if pos['tier'] == 1:
-                        if self.signal_engine.check_tier_2_signal(current_price, avg_price, config.TIER_2_DROP_PCT, df_slice):
-                            exec_price = current_price * 1.0005
-                            self.execute_buy(symbol, config.TIER_2_AMOUNT, exec_price, timestamp, 2)
+                        if self.signal_engine.check_tier_2_signal(current_price, avg_price, config.TIER_2_DEV_PCT, direction, df_slice):
+                            exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
+                            self.execute_order(symbol, config.TIER_2_MARGIN, exec_price, timestamp, 2, direction)
                     elif pos['tier'] == 2:
-                        if self.signal_engine.check_tier_3_signal(current_price, avg_price, config.TIER_3_DROP_PCT):
-                            exec_price = current_price * 1.0005
-                            self.execute_buy(symbol, config.TIER_3_AMOUNT, exec_price, timestamp, 3)
+                        if self.signal_engine.check_tier_3_signal(current_price, avg_price, config.TIER_3_DEV_PCT, direction):
+                            exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
+                            self.execute_order(symbol, config.TIER_3_MARGIN, exec_price, timestamp, 3, direction)
 
             # 3. Scanning Phase
             if len(self.positions) < config.MAX_ACTIVE_TRADES:
@@ -218,32 +246,35 @@ class BacktestEngine:
                     df_slice = indicators[symbol].loc[:timestamp]
                     current_price = indicators[symbol].loc[timestamp]['close']
 
-                    if self.signal_engine.check_tier_1_signal(symbol, df_slice):
+                    if self.signal_engine.check_tier_1_long_signal(symbol, df_slice):
                         exec_price = current_price * 1.0005
-                        self.execute_buy(symbol, config.TIER_1_AMOUNT, exec_price, timestamp, 1)
+                        self.execute_order(symbol, config.TIER_1_MARGIN, exec_price, timestamp, 1, 'long')
+                    elif self.signal_engine.check_tier_1_short_signal(symbol, df_slice):
+                        exec_price = current_price * 0.9995
+                        self.execute_order(symbol, config.TIER_1_MARGIN, exec_price, timestamp, 1, 'short')
 
-                        if len(self.positions) >= config.MAX_ACTIVE_TRADES:
-                            break
+                    if len(self.positions) >= config.MAX_ACTIVE_TRADES:
+                        break
 
         self.print_report()
 
     def print_report(self):
-        sell_trades = [t for t in self.trades if t['type'] == 'sell']
-        wins = [t for t in sell_trades if t['pnl'] > 0]
-        losses = [t for t in sell_trades if t['pnl'] <= 0]
+        closed_trades = [t for t in self.trades if t['type'] == 'close']
+        wins = [t for t in closed_trades if t['pnl'] > 0]
+        losses = [t for t in closed_trades if t['pnl'] <= 0]
 
-        win_rate = (len(wins) / len(sell_trades)) * 100 if sell_trades else 0
-        total_pnl = sum(t['pnl'] for t in sell_trades)
+        win_rate = (len(wins) / len(closed_trades)) * 100 if closed_trades else 0
+        total_pnl = sum(t['pnl'] for t in closed_trades)
 
         print("\n" + "="*40)
-        print("📊 BACKTEST PERFORMANCE REPORT (MULTI-ASSET MICRO DCA)")
+        print("📊 BACKTEST PERFORMANCE REPORT (BINANCE FUTURES DCA)")
         print("="*40)
         print(f"Symbols: {', '.join(self.symbols)}")
         print(f"Timeframe: {config.TIMEFRAME}")
         print(f"Initial Balance: {self.initial_balance} USDT")
         print(f"Final Balance: {self.current_balance:.2f} USDT")
         print(f"Total Net PnL: {total_pnl:.2f} USDT")
-        print(f"Total Trades (Cycles): {len(sell_trades)}")
+        print(f"Total Trades (Cycles): {len(closed_trades)}")
         print(f"Win Rate: {win_rate:.2f}%")
         print(f"Max Drawdown (MDD): {self.max_drawdown*100:.2f}%")
         print(f"Max Margin Usage: {self.max_margin_usage:.2f} USDT")

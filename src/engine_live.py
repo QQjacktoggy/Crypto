@@ -16,16 +16,16 @@ class LiveEngine:
         self.notifier = TelegramNotifier()
 
         # State Management: Multiple active positions
-        # format: { 'BTC/USDT': {'tier': 1, 'amount': 0.1, 'cost_usdt': 20.0, 'fees_usdt': 0.05, 'cooldown': False} }
+        # format: { 'BTC/USDT': {'tier': 1, 'direction': 'long', 'amount': 0.1, 'margin_usdt': 10.0, 'notional_usdt': 50.0, 'fees_usdt': 0.05} }
         self.positions = {}
-        # Cooldown state per symbol
+        # Cooldown state: format: {'BTC/USDT': 'long'}
         self.cooldown_symbols = {}
 
     def get_avg_price(self, symbol):
         pos = self.positions.get(symbol)
         if not pos or pos['amount'] == 0:
             return 0.0
-        return pos['cost_usdt'] / pos['amount']
+        return pos['notional_usdt'] / pos['amount']
 
     def clear_position(self, symbol):
         if symbol in self.positions:
@@ -35,28 +35,42 @@ class LiveEngine:
         pos = self.positions.get(symbol)
         if not pos or pos['amount'] == 0:
             return 0.0
-        current_value = pos['amount'] * current_price
-        estimated_exit_fee = current_value * config.FEE_RATE
-        net_pnl = current_value - pos['cost_usdt'] - pos['fees_usdt'] - estimated_exit_fee
+
+        current_notional = pos['amount'] * current_price
+        estimated_exit_fee = current_notional * config.FEE_RATE
+
+        if pos['direction'] == 'long':
+            gross_pnl = current_notional - pos['notional_usdt']
+        else:
+            gross_pnl = pos['notional_usdt'] - current_notional
+
+        net_pnl = gross_pnl - pos['fees_usdt'] - estimated_exit_fee
         return net_pnl
 
-    def execute_buy(self, symbol, amount_usdt, tier_level):
-        order = self.broker.create_market_buy_order(symbol, amount_usdt)
+    def execute_order(self, symbol, margin_usdt, tier_level, direction):
+        side = 'buy' if direction == 'long' else 'sell'
+
+        order = self.broker.execute_futures_order(symbol, margin_usdt, side, side.upper())
         if order:
             if symbol not in self.positions:
-                self.positions[symbol] = {'tier': 0, 'amount': 0.0, 'cost_usdt': 0.0, 'fees_usdt': 0.0}
+                self.positions[symbol] = {
+                    'tier': 0, 'direction': direction, 'amount': 0.0,
+                    'margin_usdt': 0.0, 'notional_usdt': 0.0, 'fees_usdt': 0.0
+                }
 
             pos = self.positions[symbol]
             pos['tier'] = tier_level
             pos['amount'] += order['amount']
-            pos['cost_usdt'] += order['cost_usdt']
+            pos['margin_usdt'] += order['margin_used']
+            pos['notional_usdt'] += order['notional_value']
             pos['fees_usdt'] += order['fee_usdt']
 
+            dir_str = "LONG" if direction == "long" else "SHORT"
             self.notifier.notify_trade(symbol, tier_level, order['amount'], order['price'])
-            logger.info(f"Bought {symbol} Tier {tier_level} at {order['price']}. Amount: {order['amount']}")
+            logger.info(f"Opened {dir_str} on {symbol} Tier {tier_level} at {order['price']}. Amount: {order['amount']}")
             return True
         else:
-            self.notifier.notify_error(f"Failed to execute buy for {symbol} Tier {tier_level}")
+            self.notifier.notify_error(f"Failed to execute {direction} order for {symbol} Tier {tier_level}")
             return False
 
     def close_position(self, symbol, pnl, is_tp=True):
@@ -64,13 +78,15 @@ class LiveEngine:
         if not pos:
             return
 
-        order = self.broker.create_market_sell_order(symbol, pos['amount'])
+        close_side = 'sell' if pos['direction'] == 'long' else 'buy'
+        order = self.broker.execute_close_futures_position(symbol, pos['amount'], close_side)
+
         if order:
             if is_tp:
                 self.notifier.notify_tp(symbol, pnl)
                 logger.info(f"TP closed for {symbol}. PnL: {pnl}")
             else:
-                self.cooldown_symbols[symbol] = True
+                self.cooldown_symbols[symbol] = pos['direction'] # Cooldown same direction
                 self.notifier.notify_sl(symbol, pnl)
                 logger.info(f"SL closed for {symbol}. PnL: {pnl}. Entering Cooldown.")
 
@@ -89,14 +105,14 @@ class LiveEngine:
     def run_cycle(self):
         # 1. Manage Cooldowns
         symbols_to_remove_cooldown = []
-        for symbol in self.cooldown_symbols.keys():
+        for symbol, direction in self.cooldown_symbols.items():
             df = self.fetch_data_df(symbol)
             df = self.signal_engine.calculate_indicators(df)
-            if self.signal_engine.evaluate_cooldown(df):
-                logger.info(f"Cooldown ended for {symbol}. Market stabilized.")
+            if self.signal_engine.evaluate_cooldown(df, direction):
+                logger.info(f"Cooldown ended for {symbol} ({direction}). Market stabilized.")
                 symbols_to_remove_cooldown.append(symbol)
             else:
-                logger.info(f"Market still in cooldown for {symbol}. Waiting...")
+                logger.info(f"Market still in cooldown for {symbol} ({direction}). Waiting...")
 
         for symbol in symbols_to_remove_cooldown:
             del self.cooldown_symbols[symbol]
@@ -111,7 +127,7 @@ class LiveEngine:
             net_pnl = self.calculate_pnl(symbol, current_price)
             avg_price = self.get_avg_price(symbol)
 
-            logger.info(f"Managing {symbol} | Tier: {pos['tier']} | PnL: {net_pnl:.4f} | Price: {current_price}")
+            logger.info(f"Managing {symbol} ({pos['direction']}) | Tier: {pos['tier']} | PnL: {net_pnl:.4f} | Price: {current_price}")
 
             # Check TP/SL
             if net_pnl >= config.TP_NET_PROFIT:
@@ -126,13 +142,13 @@ class LiveEngine:
             df = self.signal_engine.calculate_indicators(df)
 
             if pos['tier'] == 1:
-                if self.signal_engine.check_tier_2_signal(current_price, avg_price, config.TIER_2_DROP_PCT, df):
-                    logger.info(f"Tier 2 signal detected for {symbol}")
-                    self.execute_buy(symbol, config.TIER_2_AMOUNT, 2)
+                if self.signal_engine.check_tier_2_signal(current_price, avg_price, config.TIER_2_DEV_PCT, pos['direction'], df):
+                    logger.info(f"Tier 2 {pos['direction']} signal detected for {symbol}")
+                    self.execute_order(symbol, config.TIER_2_MARGIN, 2, pos['direction'])
             elif pos['tier'] == 2:
-                if self.signal_engine.check_tier_3_signal(current_price, avg_price, config.TIER_3_DROP_PCT):
-                    logger.info(f"Tier 3 signal detected for {symbol}")
-                    self.execute_buy(symbol, config.TIER_3_AMOUNT, 3)
+                if self.signal_engine.check_tier_3_signal(current_price, avg_price, config.TIER_3_DEV_PCT, pos['direction']):
+                    logger.info(f"Tier 3 {pos['direction']} signal detected for {symbol}")
+                    self.execute_order(symbol, config.TIER_3_MARGIN, 3, pos['direction'])
 
         # 3. Scanning for New Positions
         if len(self.positions) < config.MAX_ACTIVE_TRADES:
@@ -143,12 +159,15 @@ class LiveEngine:
                 df = self.fetch_data_df(symbol)
                 df = self.signal_engine.calculate_indicators(df)
 
-                if self.signal_engine.check_tier_1_signal(symbol, df):
-                    logger.info(f"Tier 1 signal detected for {symbol}")
-                    self.execute_buy(symbol, config.TIER_1_AMOUNT, 1)
+                if self.signal_engine.check_tier_1_long_signal(symbol, df):
+                    logger.info(f"Tier 1 LONG signal detected for {symbol}")
+                    self.execute_order(symbol, config.TIER_1_MARGIN, 1, 'long')
+                elif self.signal_engine.check_tier_1_short_signal(symbol, df):
+                    logger.info(f"Tier 1 SHORT signal detected for {symbol}")
+                    self.execute_order(symbol, config.TIER_1_MARGIN, 1, 'short')
 
-                    if len(self.positions) >= config.MAX_ACTIVE_TRADES:
-                        break # Reached max concurrent trades
+                if len(self.positions) >= config.MAX_ACTIVE_TRADES:
+                    break # Reached max concurrent trades
 
     def start(self, poll_interval=60):
         logger.info("Starting Live Engine (Multi-Asset)...")

@@ -12,12 +12,27 @@ class Broker:
             'apiKey': config.API_KEY,
             'secret': config.API_SECRET,
             'enableRateLimit': True,
+            'options': {
+                'defaultType': 'future'  # Force Binance USDT-M Futures
+            }
         })
         if use_testnet:
             self.exchange.set_sandbox_mode(True)
 
         # Cache for market details to handle precision
         self.markets = None
+
+    def set_leverage_and_margin(self, symbol):
+        """
+        Sets the leverage and margin mode for the symbol on Binance Futures.
+        """
+        try:
+            self.exchange.set_leverage(config.LEVERAGE, symbol)
+            self.exchange.set_margin_mode(config.MARGIN_MODE, symbol)
+            logger.info(f"Successfully set {config.LEVERAGE}x leverage and {config.MARGIN_MODE} margin for {symbol}.")
+        except Exception as e:
+            # Often throws exception if leverage/margin mode is already set, which is fine
+            logger.debug(f"Note while setting leverage/margin for {symbol}: {e}")
 
     def load_markets(self):
         try:
@@ -54,13 +69,20 @@ class Broker:
             logger.error(f"Error fetching OHLCV for {symbol}: {e}")
             return []
 
-    def create_market_buy_order(self, symbol, amount_usdt):
+    def execute_futures_order(self, symbol: str, margin_usdt: float, side: str, positionSide: str):
         """
-        Calculates the quantity of base currency to buy using amount_usdt.
+        Executes a futures market order.
+        margin_usdt: The actual USDT collateral you want to use.
+        side: 'buy' or 'sell'
+        positionSide: 'LONG' or 'SHORT' (for hedge mode) or usually defaults in one-way mode.
+        Since we are in one-way mode for simplicity, we just use side='buy' (to open long/close short)
+        and side='sell' (to open short/close long).
         """
+        # Ensure leverage is configured on the exchange for this symbol
+        self.set_leverage_and_margin(symbol)
+
         price = self.get_ticker(symbol)
-        if not price:
-            return None
+        if not price: return None
 
         if self.markets is None:
             self.load_markets()
@@ -70,64 +92,71 @@ class Broker:
             logger.error(f"Market {symbol} not found.")
             return None
 
-        # Calculate amount to buy
-        amount = amount_usdt / price
+        # Calculate position size: Margin * Leverage
+        position_value_usdt = margin_usdt * config.LEVERAGE
+        amount = position_value_usdt / price
 
         # Convert to exchange precision
-        amount = self.exchange.amount_to_precision(symbol, amount)
-        amount = float(amount)
+        amount_precision = self.exchange.amount_to_precision(symbol, amount)
+        amount = float(amount_precision)
 
         try:
             order = self.exchange.create_order(
                 symbol=symbol,
                 type='market',
-                side='buy',
+                side=side,
                 amount=amount
             )
-            # Estimate fee (this is a rough estimate since actual fee is charged in base currency usually)
-            fee = amount_usdt * config.FEE_RATE
+
+            # The notional value of the trade
+            notional_value = amount * price
+            fee = notional_value * config.FEE_RATE
+
             return {
                 'order_id': order.get('id'),
                 'symbol': symbol,
                 'amount': amount,
                 'price': price,
-                'cost_usdt': amount * price,
+                'notional_value': notional_value,
+                'margin_used': notional_value / config.LEVERAGE,
                 'fee_usdt': fee,
                 'status': order.get('status', 'closed')
             }
         except Exception as e:
-            logger.error(f"Error executing buy order for {symbol}: {e}")
+            logger.error(f"Error executing {side} order for {symbol}: {e}")
             return None
 
-    def create_market_sell_order(self, symbol, amount):
+    def execute_close_futures_position(self, symbol: str, amount: float, side: str):
         """
-        Sells a specific amount of the base currency.
+        Closes an existing futures position.
+        side: 'buy' to close a short, 'sell' to close a long.
         """
         if self.markets is None:
             self.load_markets()
 
-        amount = self.exchange.amount_to_precision(symbol, amount)
-        amount = float(amount)
+        amount_precision = self.exchange.amount_to_precision(symbol, amount)
+        amount = float(amount_precision)
 
         try:
             order = self.exchange.create_order(
                 symbol=symbol,
                 type='market',
-                side='sell',
-                amount=amount
+                side=side,
+                amount=amount,
+                params={'reduceOnly': True} # Safe-guard to prevent opening opposite position
             )
             price = self.get_ticker(symbol)
-            cost_usdt = amount * price
-            fee = cost_usdt * config.FEE_RATE
+            notional_value = amount * price
+            fee = notional_value * config.FEE_RATE
             return {
                 'order_id': order.get('id'),
                 'symbol': symbol,
                 'amount': amount,
                 'price': price,
-                'cost_usdt': cost_usdt,
+                'notional_value': notional_value,
                 'fee_usdt': fee,
                 'status': order.get('status', 'closed')
             }
         except Exception as e:
-            logger.error(f"Error executing sell order for {symbol}: {e}")
+            logger.error(f"Error closing position for {symbol}: {e}")
             return None
