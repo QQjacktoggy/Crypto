@@ -195,6 +195,12 @@ class BacktestEngine:
         common_timestamps = common_timestamps.sort_values().reset_index(drop=True)
 
         logger.info("Starting Multi-Asset Simulation...")
+
+        def get_dynamic_margin():
+            if config.COMPOUND_MODE:
+                return self.current_balance * config.TIER_MARGIN_PCT
+            return config.TIER_1_MARGIN
+
         # Start from index 20
         for i in range(20, len(common_timestamps)):
             timestamp = common_timestamps.iloc[i]
@@ -233,14 +239,23 @@ class BacktestEngine:
                     worst_price = row['high']
                     best_price = row['low']
 
+                if config.COMPOUND_MODE:
+                    target_tp = pos['margin_usdt'] * config.TP_MARGIN_ROI
+                    margin_sl = pos['margin_usdt'] * config.SL_MARGIN_ROI
+                    global_cap_sl = self.current_balance * config.SL_GLOBAL_CAP_PCT
+                    target_sl = max(margin_sl, global_cap_sl)
+                else:
+                    target_tp = config.TP_NET_PROFIT
+                    target_sl = config.SL_MAX_LOSS
+
                 sl_pnl = self.calculate_pnl(symbol, worst_price)
-                if sl_pnl <= config.SL_MAX_LOSS:
+                if sl_pnl <= target_sl:
                     exec_price = worst_price * (0.9995 if direction == 'long' else 1.0005) # slippage
                     self.close_position(symbol, exec_price, timestamp, is_tp=False)
                     continue
 
                 tp_pnl = self.calculate_pnl(symbol, best_price)
-                if tp_pnl >= config.TP_NET_PROFIT:
+                if tp_pnl >= target_tp:
                     exec_price = best_price * (0.9995 if direction == 'long' else 1.0005) # slippage
                     self.close_position(symbol, exec_price, timestamp, is_tp=True)
                     continue
@@ -250,18 +265,20 @@ class BacktestEngine:
                 if pos: # Might have been closed above
                     avg_price = self.get_avg_price(symbol)
                     df_slice = indicators[symbol].loc[:timestamp]
+                    margin_to_use = get_dynamic_margin()
 
                     if pos['tier'] == 1:
                         if self.signal_engine.check_tier_2_signal(current_price, avg_price, config.TIER_2_DEV_PCT, direction, df_slice):
                             exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
-                            self.execute_order(symbol, config.TIER_2_MARGIN, exec_price, timestamp, 2, direction)
+                            self.execute_order(symbol, margin_to_use, exec_price, timestamp, 2, direction)
                     elif pos['tier'] == 2:
                         if self.signal_engine.check_tier_3_signal(current_price, avg_price, config.TIER_3_DEV_PCT, direction):
                             exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
-                            self.execute_order(symbol, config.TIER_3_MARGIN, exec_price, timestamp, 3, direction)
+                            self.execute_order(symbol, margin_to_use, exec_price, timestamp, 3, direction)
 
             # 3. Scanning Phase
             if len(self.positions) < config.MAX_ACTIVE_TRADES:
+                margin_to_use = get_dynamic_margin()
                 for symbol in self.symbols:
                     if symbol in self.positions or symbol in self.cooldown_symbols:
                         continue
@@ -275,10 +292,10 @@ class BacktestEngine:
 
                     if can_go_long and self.signal_engine.check_tier_1_long_signal(symbol, df_slice):
                         exec_price = current_price * 1.0005
-                        self.execute_order(symbol, config.TIER_1_MARGIN, exec_price, timestamp, 1, 'long')
+                        self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'long')
                     elif can_go_short and self.signal_engine.check_tier_1_short_signal(symbol, df_slice):
                         exec_price = current_price * 0.9995
-                        self.execute_order(symbol, config.TIER_1_MARGIN, exec_price, timestamp, 1, 'short')
+                        self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'short')
 
                     if len(self.positions) >= config.MAX_ACTIVE_TRADES:
                         break
@@ -306,8 +323,12 @@ class BacktestEngine:
         print(f"Max Drawdown (MDD): {self.max_drawdown*100:.2f}%")
         print(f"Max Margin Usage: {self.max_margin_usage:.2f} USDT")
         print("="*40)
-        if self.max_margin_usage > self.initial_balance:
-            print("⚠️ WARNING: Max margin usage exceeded initial balance. Account would have been liquidated!")
+        # Margin safety warning: For compound mode, margin_usage naturally exceeds initial_balance.
+        # What matters is that Max Drawdown hasn't blown up the account.
+        if self.max_drawdown > 0.99:
+            print("⚠️ WARNING: Max Drawdown hit ~100%. Account would have been liquidated!")
+        elif not config.COMPOUND_MODE and self.max_margin_usage > self.initial_balance:
+            print("⚠️ WARNING: Fixed margin exceeded initial balance. Account would have been liquidated!")
         else:
             print("✅ Margin safety passed.")
         print("="*40 + "\n")

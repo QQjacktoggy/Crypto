@@ -1,0 +1,26 @@
+2026-04-15 06:22:58,866 - INFO - Initializing Multi-Asset Backtest Engine over 180 days...
+2026-04-15 06:22:58,874 - INFO - Loading data and calculating indicators for all symbols...
+2026-04-15 06:22:58,874 - INFO - Loading cached data from data/BTC_USDT:USDT_180d_5m.csv
+2026-04-15 06:22:59,753 - INFO - Loading cached data from data/ETH_USDT:USDT_180d_5m.csv
+2026-04-15 06:22:59,965 - INFO - Loading cached data from data/SOL_USDT:USDT_180d_5m.csv
+2026-04-15 06:23:00,102 - INFO - Loading cached data from data/DOGE_USDT:USDT_180d_5m.csv
+2026-04-15 06:23:00,248 - INFO - Loading cached data from data/XRP_USDT:USDT_180d_5m.csv
+2026-04-15 06:23:00,393 - INFO - Fetching and calculating Daily Trend Filter (BTC 200 SMA)...
+2026-04-15 06:23:00,393 - INFO - Loading cached data from data/BTC_USDT:USDT_380d_1d.csv
+2026-04-15 06:23:00,437 - INFO - Starting Multi-Asset Simulation...
+
+========================================
+📊 BACKTEST PERFORMANCE REPORT (BINANCE FUTURES DCA)
+========================================
+Symbols: BTC/USDT:USDT, ETH/USDT:USDT, SOL/USDT:USDT, DOGE/USDT:USDT, XRP/USDT:USDT
+Timeframe: 5m
+Initial Balance: 150.0 USDT
+Final Balance: 202.14 USDT
+Total Net PnL: 259.47 USDT
+Total Trades (Cycles): 188
+Win Rate: 95.21%
+Max Drawdown (MDD): 67.37%
+Max Margin Usage: 210.06 USDT
+========================================
+⚠️ WARNING: Max margin usage exceeded initial balance. Account would have been liquidated!
+========================================

@@ -28,22 +28,38 @@ class Config:
     # Target symbols for Binance USDT-M Futures (CCXT syntax for linear futures)
     SYMBOLS = ['BTC/USDT:USDT', 'ETH/USDT:USDT', 'SOL/USDT:USDT', 'DOGE/USDT:USDT', 'XRP/USDT:USDT']
 
-    # Capital allocation per tier (USDT Margin, NOT position size)
-    # Linear DCA: 10 USDT margin per tier. With 5x leverage, position size is 50 USDT per tier.
+    # --- Compound Interest (Reinvesting Profits) ---
+    COMPOUND_MODE = True
+    # If True, TIER_MARGIN will be calculated as: current_balance * TIER_MARGIN_PCT
+    # 0.066 represents ~6.6% of account per tier. At 150U, it equals 9.9U.
+    # 4 positions * 3 tiers * 6.6% = 79.2% max utilization of current balance, leaving ~20% buffer.
+    TIER_MARGIN_PCT = 0.066
+
+    # Capital allocation per tier (USDT Margin) [Used only if COMPOUND_MODE is False]
     TIER_1_MARGIN = 10.0
     TIER_2_MARGIN = 10.0
     TIER_3_MARGIN = 10.0
 
     # Trigger conditions (price deviation % from average entry price)
-    # Since leverage is 5x, a 1.5% move in price = 7.5% move in PnL
     TIER_2_DEV_PCT = 0.015  # 1.5% adverse move
     TIER_3_DEV_PCT = 0.030  # 3.0% adverse move
 
     # Take Profit & Stop Loss
-    # We aim for higher absolute profit per cycle due to leverage
-    TP_NET_PROFIT = 1.5      # USDT net profit (Optimized target for 5x leverage)
-    # Max loss per position: if tier 3 is hit (30U margin), a total loss of -10U is acceptable before cutting
-    SL_MAX_LOSS = -10.0      # USDT per position
+    # If COMPOUND_MODE is True, we target a percentage ROI on the invested margin
+    # TP = 15% return on margin. SL = 100% loss of margin
+    TP_MARGIN_ROI = 0.15
+    SL_MARGIN_ROI = -1.0
+
+    # --- Absolute Safety Net ---
+    # In COMPOUND_MODE, a 100% margin loss can be devastating when balance is huge.
+    # This caps the maximum loss of a single position to X% of the TOTAL current account balance.
+    # Default is 0.08 (8%). If the margin loss exceeds 8% of the total account, it cuts early.
+    # We found 8% gives the best balance between giving trades room to bounce and protecting capital.
+    SL_GLOBAL_CAP_PCT = -0.08
+
+    # Fixed absolute USDT targets [Used only if COMPOUND_MODE is False]
+    TP_NET_PROFIT = 1.5
+    SL_MAX_LOSS = -10.0
 
     # Technical Indicator Parameters
     RSI_LONG_ENTRY = 25

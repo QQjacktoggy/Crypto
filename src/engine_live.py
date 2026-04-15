@@ -117,6 +117,15 @@ class LiveEngine:
         for symbol in symbols_to_remove_cooldown:
             del self.cooldown_symbols[symbol]
 
+        current_balance = self.broker.get_balance()
+        if current_balance <= 0:
+            current_balance = config.BASE_CAPITAL # fallback
+
+        def get_dynamic_margin():
+            if config.COMPOUND_MODE:
+                return current_balance * config.TIER_MARGIN_PCT
+            return config.TIER_1_MARGIN
+
         # 2. Manage Active Positions
         for symbol in list(self.positions.keys()):
             pos = self.positions[symbol]
@@ -130,10 +139,20 @@ class LiveEngine:
             logger.info(f"Managing {symbol} ({pos['direction']}) | Tier: {pos['tier']} | PnL: {net_pnl:.4f} | Price: {current_price}")
 
             # Check TP/SL
-            if net_pnl >= config.TP_NET_PROFIT:
+            if config.COMPOUND_MODE:
+                target_tp = pos['margin_usdt'] * config.TP_MARGIN_ROI
+                # Max loss is either 100% of margin, or the global cap percentage of the total balance, whichever is less damaging (closer to zero).
+                margin_sl = pos['margin_usdt'] * config.SL_MARGIN_ROI
+                global_cap_sl = current_balance * config.SL_GLOBAL_CAP_PCT
+                target_sl = max(margin_sl, global_cap_sl)
+            else:
+                target_tp = config.TP_NET_PROFIT
+                target_sl = config.SL_MAX_LOSS
+
+            if net_pnl >= target_tp:
                 self.close_position(symbol, net_pnl, is_tp=True)
                 continue
-            elif net_pnl <= config.SL_MAX_LOSS:
+            elif net_pnl <= target_sl:
                 self.close_position(symbol, net_pnl, is_tp=False)
                 continue
 
@@ -141,17 +160,20 @@ class LiveEngine:
             df = self.fetch_data_df(symbol)
             df = self.signal_engine.calculate_indicators(df)
 
+            margin_to_use = get_dynamic_margin()
+
             if pos['tier'] == 1:
                 if self.signal_engine.check_tier_2_signal(current_price, avg_price, config.TIER_2_DEV_PCT, pos['direction'], df):
                     logger.info(f"Tier 2 {pos['direction']} signal detected for {symbol}")
-                    self.execute_order(symbol, config.TIER_2_MARGIN, 2, pos['direction'])
+                    self.execute_order(symbol, margin_to_use, 2, pos['direction'])
             elif pos['tier'] == 2:
                 if self.signal_engine.check_tier_3_signal(current_price, avg_price, config.TIER_3_DEV_PCT, pos['direction']):
                     logger.info(f"Tier 3 {pos['direction']} signal detected for {symbol}")
-                    self.execute_order(symbol, config.TIER_3_MARGIN, 3, pos['direction'])
+                    self.execute_order(symbol, margin_to_use, 3, pos['direction'])
 
         # 3. Scanning for New Positions
         if len(self.positions) < config.MAX_ACTIVE_TRADES:
+            margin_to_use = get_dynamic_margin()
             for symbol in config.SYMBOLS:
                 if symbol in self.positions or symbol in self.cooldown_symbols:
                     continue # Skip already active or cooldown symbols
@@ -161,10 +183,10 @@ class LiveEngine:
 
                 if self.signal_engine.check_tier_1_long_signal(symbol, df):
                     logger.info(f"Tier 1 LONG signal detected for {symbol}")
-                    self.execute_order(symbol, config.TIER_1_MARGIN, 1, 'long')
+                    self.execute_order(symbol, margin_to_use, 1, 'long')
                 elif self.signal_engine.check_tier_1_short_signal(symbol, df):
                     logger.info(f"Tier 1 SHORT signal detected for {symbol}")
-                    self.execute_order(symbol, config.TIER_1_MARGIN, 1, 'short')
+                    self.execute_order(symbol, margin_to_use, 1, 'short')
 
                 if len(self.positions) >= config.MAX_ACTIVE_TRADES:
                     break # Reached max concurrent trades
