@@ -32,24 +32,13 @@ nano .env
 ```
 Paste your credentials:
 ```env
-API_KEY=your_binance_api_key
-API_SECRET=your_binance_api_secret
+API_KEY=your_cryptocom_api_key
+API_SECRET=your_cryptocom_api_secret
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 TELEGRAM_CHAT_ID=your_telegram_chat_id
 ```
 
-### 4. Verify Environment (Optional but Recommended)
-Before running the bot, you can verify that your API credentials and network connection are working correctly.
-
-```bash
-# Verify connection to Binance Mainnet
-python verify_env.py
-
-# Or verify connection to Binance Testnet
-python verify_env.py --testnet
-```
-
-### 5. Build and Run using Docker Compose
+### 4. Build and Run using Docker Compose
 Create a `docker-compose.yml` file in the root if you prefer, or build directly:
 
 #### Option A: Direct Docker Run

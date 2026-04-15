@@ -1,0 +1,23 @@
+Starting 365-day backtest... This will take ~10-15 minutes due to API rate limits.
+
+==================================================
+📅 365-DAY MONTHLY PERFORMANCE (FINAL COMPOUND & SAFECAP)
+==================================================
+[2025-04]
+  • Trades: 17 (15 W / 2 L)
+  • Win Rate: 88.24%
+  • Monthly Net PnL: +9.02 USDT
+  • Cumulative PnL: +9.02 USDT
+------------------------------
+[2025-05]
+  • Trades: 14 (9 W / 5 L)
+  • Win Rate: 64.29%
+  • Monthly Net PnL: -11.89 USDT
+  • Cumulative PnL: -2.87 USDT
+------------------------------
+==================================================
+📊 1-Year Total Net PnL: -2.87 USDT
+💰 Final Balance: 129.41 USDT
+🔥 Max Margin Usage: 82.26 USDT
+📉 Max Drawdown: 38.29%
+==================================================
