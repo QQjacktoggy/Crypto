@@ -41,9 +41,14 @@ class Config:
 
     # Take Profit & Stop Loss
     # We aim for higher absolute profit per cycle due to leverage
-    TP_NET_PROFIT = 1.0      # USDT net profit
+    TP_NET_PROFIT = 1.5      # USDT net profit (Optimized target for 5x leverage)
     # Max loss per position: if tier 3 is hit (30U margin), a total loss of -10U is acceptable before cutting
     SL_MAX_LOSS = -10.0      # USDT per position
+
+    # Technical Indicator Parameters
+    RSI_LONG_ENTRY = 25
+    RSI_SHORT_ENTRY = 75
+    TREND_SMA_LENGTH = 200
 
     # Binance Futures Fee Rate (Maker 0.02%, Taker 0.05%. We use 0.05% for market orders)
     FEE_RATE = 0.0005

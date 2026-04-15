@@ -61,24 +61,25 @@ class SignalEngine:
     def calculate_daily_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Calculates long-term indicators on daily data for trend filtering.
-        Specifically adds a 200 SMA.
+        Specifically adds a configurable SMA.
         """
-        if df.empty or len(df) < 200:
+        sma_len = config.TREND_SMA_LENGTH
+        if df.empty or len(df) < sma_len:
             return df
 
-        df.ta.sma(length=200, append=True)
+        df.ta.sma(length=sma_len, append=True)
         return df
 
     def get_market_regime(self, df_daily: pd.DataFrame) -> str:
         """
-        Determines the current market regime (bull or bear) based on the 1D 200SMA.
+        Determines the current market regime (bull or bear) based on the 1D SMA.
         Returns 'bull', 'bear', or 'neutral' (if insufficient data).
         """
         if df_daily.empty or len(df_daily) < 1:
             return 'neutral'
 
         latest = df_daily.iloc[-1]
-        sma_col = [c for c in df_daily.columns if c.startswith('SMA_200')]
+        sma_col = [c for c in df_daily.columns if c.startswith(f'SMA_{config.TREND_SMA_LENGTH}')]
 
         if not sma_col:
             return 'neutral'
@@ -99,7 +100,7 @@ class SignalEngine:
     def check_tier_1_long_signal(self, symbol: str, df: pd.DataFrame) -> bool:
         """
         Checks if conditions for Tier 1 Long entry are met.
-        Condition: RSI < 25 AND Price touches/crosses lower Bollinger Band.
+        Condition: RSI < RSI_LONG_ENTRY AND Price touches/crosses lower Bollinger Band.
         """
         if df.empty or len(df) < 20:
             return False
@@ -117,7 +118,7 @@ class SignalEngine:
 
         if pd.isna(rsi_val) or pd.isna(bbl_val): return False
 
-        traditional_signal = (rsi_val < 25 and close_val <= bbl_val)
+        traditional_signal = (rsi_val < config.RSI_LONG_ENTRY and close_val <= bbl_val)
 
         if not traditional_signal:
             return False
@@ -136,7 +137,7 @@ class SignalEngine:
     def check_tier_1_short_signal(self, symbol: str, df: pd.DataFrame) -> bool:
         """
         Checks if conditions for Tier 1 Short entry are met.
-        Condition: RSI > 75 AND Price touches/crosses upper Bollinger Band.
+        Condition: RSI > RSI_SHORT_ENTRY AND Price touches/crosses upper Bollinger Band.
         """
         if df.empty or len(df) < 20:
             return False
@@ -154,7 +155,7 @@ class SignalEngine:
 
         if pd.isna(rsi_val) or pd.isna(bbu_val): return False
 
-        traditional_signal = (rsi_val > 75 and close_val >= bbu_val)
+        traditional_signal = (rsi_val > config.RSI_SHORT_ENTRY and close_val >= bbu_val)
 
         if not traditional_signal:
             return False
