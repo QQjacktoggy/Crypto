@@ -9,6 +9,10 @@ from src.notifier import TelegramNotifier
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+import datetime
+import pytz
+import schedule
+
 class LiveEngine:
     def __init__(self, use_testnet=False):
         self.broker = Broker(use_testnet=use_testnet)
@@ -20,6 +24,10 @@ class LiveEngine:
         self.positions = {}
         # Cooldown state: format: {'BTC/USDT': 'long'}
         self.cooldown_symbols = {}
+
+        # Reporting State Management
+        self.initial_balance = None
+        self.recent_trades = []
 
     def get_avg_price(self, symbol):
         pos = self.positions.get(symbol)
@@ -68,6 +76,20 @@ class LiveEngine:
             dir_str = "LONG" if direction == "long" else "SHORT"
             self.notifier.notify_trade(symbol, tier_level, order['amount'], order['price'])
             logger.info(f"Opened {dir_str} on {symbol} Tier {tier_level} at {order['price']}. Amount: {order['amount']}")
+
+            # Record trade for reporting
+            tz_tpe = pytz.timezone('Asia/Taipei')
+            now_str = datetime.datetime.now(tz_tpe).strftime("%Y-%m-%d %H:%M:%S")
+            self.recent_trades.append({
+                'time': now_str,
+                'action': 'OPEN',
+                'symbol': symbol,
+                'direction': dir_str,
+                'tier': tier_level,
+                'price': order['price'],
+                'amount': order['amount'],
+                'pnl': 0.0
+            })
             return True
         else:
             self.notifier.notify_error(f"Failed to execute {direction} order for {symbol} Tier {tier_level}")
@@ -82,6 +104,7 @@ class LiveEngine:
         order = self.broker.execute_close_futures_position(symbol, pos['amount'], close_side)
 
         if order:
+            action_str = 'TP' if is_tp else 'SL'
             if is_tp:
                 self.notifier.notify_tp(symbol, pnl)
                 logger.info(f"TP closed for {symbol}. PnL: {pnl}")
@@ -89,6 +112,21 @@ class LiveEngine:
                 self.cooldown_symbols[symbol] = pos['direction'] # Cooldown same direction
                 self.notifier.notify_sl(symbol, pnl)
                 logger.info(f"SL closed for {symbol}. PnL: {pnl}. Entering Cooldown.")
+
+            # Record trade for reporting
+            tz_tpe = pytz.timezone('Asia/Taipei')
+            now_str = datetime.datetime.now(tz_tpe).strftime("%Y-%m-%d %H:%M:%S")
+            dir_str = "LONG" if pos['direction'] == "long" else "SHORT"
+            self.recent_trades.append({
+                'time': now_str,
+                'action': action_str,
+                'symbol': symbol,
+                'direction': dir_str,
+                'tier': pos['tier'],
+                'price': order['price'],
+                'amount': pos['amount'],
+                'pnl': pnl
+            })
 
             self.clear_position(symbol)
         else:
@@ -102,7 +140,64 @@ class LiveEngine:
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         return df
 
+    def generate_and_send_report(self):
+        try:
+            current_balance = self.broker.get_balance()
+            if current_balance <= 0:
+                current_balance = config.BASE_CAPITAL
+
+            if self.initial_balance is None:
+                self.initial_balance = current_balance
+
+            total_profit = current_balance - self.initial_balance
+
+            # Format current positions
+            positions_text = ""
+            if not self.positions:
+                positions_text = "無"
+            else:
+                for sym, pos in self.positions.items():
+                    current_price = self.broker.get_ticker(sym) or 0.0
+                    net_pnl = self.calculate_pnl(sym, current_price)
+                    dir_str = "LONG" if pos['direction'] == "long" else "SHORT"
+                    positions_text += f"• {sym} ({dir_str}) | 階層: {pos['tier']} | 數量: {pos['amount']:.4f} | 目前損益: {net_pnl:.4f} USDT\n"
+
+            # Format recent trades
+            trades_text = ""
+            if not self.recent_trades:
+                trades_text = "無"
+            else:
+                for t in self.recent_trades:
+                    if t['action'] == 'OPEN':
+                        trades_text += f"[{t['time']}] 開倉 | {t['symbol']} ({t['direction']}) | 階層: {t['tier']} | 價格: {t['price']:.4f} | 數量: {t['amount']:.4f}\n"
+                    else:
+                        trades_text += f"[{t['time']}] 平倉 ({t['action']}) | {t['symbol']} ({t['direction']}) | 階層: {t['tier']} | 價格: {t['price']:.4f} | 損益: {t['pnl']:.4f} USDT\n"
+                # Clear trades after reporting
+                self.recent_trades = []
+
+            report_msg = (
+                f"📊 <b>定期報告</b>\n"
+                f"========================\n"
+                f"💰 <b>目前獲利結餘:</b> {total_profit:.4f} USDT\n\n"
+                f"📈 <b>目前持倉:</b>\n{positions_text}\n"
+                f"📝 <b>交易內容 (自上次報告):</b>\n{trades_text}\n"
+                f"========================"
+            )
+
+            logger.info(f"Generating scheduled report:\n{report_msg}")
+            self.notifier.notify_report(report_msg)
+
+        except Exception as e:
+            logger.error(f"Error generating report: {e}")
+
     def run_cycle(self):
+        if self.initial_balance is None:
+            bal = self.broker.get_balance()
+            if bal > 0:
+                self.initial_balance = bal
+            else:
+                self.initial_balance = config.BASE_CAPITAL
+
         # 1. Manage Cooldowns
         symbols_to_remove_cooldown = []
         for symbol, direction in self.cooldown_symbols.items():
@@ -194,8 +289,16 @@ class LiveEngine:
     def start(self, poll_interval=60):
         logger.info("Starting Live Engine (Multi-Asset)...")
         self.notifier.send_message(f"🟢 <b>Bot Started (Live Mode)</b>\nMax Concurrent Trades: {config.MAX_ACTIVE_TRADES}")
+
+        # Schedule the reports
+        schedule.every().day.at("09:00", "Asia/Taipei").do(self.generate_and_send_report)
+        schedule.every().day.at("12:00", "Asia/Taipei").do(self.generate_and_send_report)
+        schedule.every().day.at("18:00", "Asia/Taipei").do(self.generate_and_send_report)
+        schedule.every().day.at("00:00", "Asia/Taipei").do(self.generate_and_send_report)
+
         while True:
             try:
+                schedule.run_pending()
                 self.run_cycle()
             except Exception as e:
                 logger.error(f"Error in run cycle: {e}")
