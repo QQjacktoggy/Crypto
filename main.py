@@ -29,8 +29,8 @@ def main():
             logger.info("Live engine stopped by user.")
             sys.exit(0)
     elif args.mode == 'backtest':
-        logger.info(f"Initializing Backtest Engine for {args.symbol} over {args.days} days...")
-        engine = BacktestEngine(symbol=args.symbol, days=args.days)
+        logger.info(f"Initializing Multi-Asset Backtest Engine over {args.days} days...")
+        engine = BacktestEngine(days=args.days)
         engine.run()
 
 if __name__ == "__main__":

@@ -20,28 +20,28 @@ class Config:
 
     # --- Trading Parameters ---
     BASE_CAPITAL = 150.0  # USDT
-    MAX_ACTIVE_TRADES = 1 # Global lock
+    MAX_ACTIVE_TRADES = 3 # Allow up to 3 concurrent trades
 
     # Target symbols for multi-asset scanning (Spot)
     SYMBOLS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'DOGE/USDT', 'XRP/USDT']
 
-    # Capital allocation per tier (USDT)
-    TIER_1_AMOUNT = 20.0
-    TIER_2_AMOUNT = 50.0
-    TIER_3_AMOUNT = 80.0
+    # Capital allocation per tier (USDT) - Micro DCA
+    TIER_1_AMOUNT = 5.0
+    TIER_2_AMOUNT = 10.0
+    TIER_3_AMOUNT = 20.0
 
     # Trigger conditions (price drop % from average entry price)
-    TIER_2_DROP_PCT = -0.03  # -3%
-    TIER_3_DROP_PCT = -0.07  # -7%
+    TIER_2_DROP_PCT = -0.015  # -1.5%
+    TIER_3_DROP_PCT = -0.030  # -3.0%
 
     # Take Profit & Stop Loss
-    TP_NET_PROFIT = 1.0      # USDT (net profit after fees)
-    SL_MAX_LOSS = -15.0      # USDT (10% of 150 USDT)
+    TP_NET_PROFIT = 0.3      # USDT (Fast turnover)
+    SL_MAX_LOSS = -5.0       # USDT per position
 
     # Exchange Fee Estimation (Maker/Taker roughly 0.075% for default tier, we use 0.1% to be safe)
     FEE_RATE = 0.001
 
-    # Timeframes
-    TIMEFRAME = '15m'
+    # Timeframes - Shorter timeframe for higher frequency
+    TIMEFRAME = '5m'
 
 config = Config()
