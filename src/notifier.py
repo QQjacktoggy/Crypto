@@ -62,3 +62,6 @@ class TelegramNotifier:
             f"<code>{error_msg}</code>"
         )
         self.send_message(msg)
+
+    def notify_report(self, report_text: str):
+        self.send_message(report_text)
