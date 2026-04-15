@@ -31,9 +31,9 @@ class Config:
     # --- Compound Interest (Reinvesting Profits) ---
     COMPOUND_MODE = True
     # If True, TIER_MARGIN will be calculated as: current_balance * TIER_MARGIN_PCT
-    # 0.066 represents ~6.6% of account per tier. At 150U, it equals 9.9U.
-    # 4 positions * 3 tiers * 6.6% = 79.2% max utilization of current balance, leaving ~20% buffer.
-    TIER_MARGIN_PCT = 0.066
+    # Optimized for higher return (450U target): 15% of account per tier.
+    # High risk, high reward profile.
+    TIER_MARGIN_PCT = 0.15
 
     # Capital allocation per tier (USDT Margin) [Used only if COMPOUND_MODE is False]
     TIER_1_MARGIN = 10.0
@@ -46,24 +46,23 @@ class Config:
 
     # Take Profit & Stop Loss
     # If COMPOUND_MODE is True, we target a percentage ROI on the invested margin
-    # TP = 15% return on margin. SL = 100% loss of margin
-    TP_MARGIN_ROI = 0.15
+    # TP = 30% return on margin to hit higher profit targets. SL = 100% loss of margin
+    TP_MARGIN_ROI = 0.30
     SL_MARGIN_ROI = -1.0
 
     # --- Absolute Safety Net ---
     # In COMPOUND_MODE, a 100% margin loss can be devastating when balance is huge.
     # This caps the maximum loss of a single position to X% of the TOTAL current account balance.
-    # Default is 0.08 (8%). If the margin loss exceeds 8% of the total account, it cuts early.
-    # We found 8% gives the best balance between giving trades room to bounce and protecting capital.
-    SL_GLOBAL_CAP_PCT = -0.08
+    # Relaxed to 20% to prevent premature stop outs during the wider swings, aiding the 450U target.
+    SL_GLOBAL_CAP_PCT = -0.20
 
     # Fixed absolute USDT targets [Used only if COMPOUND_MODE is False]
     TP_NET_PROFIT = 1.5
     SL_MAX_LOSS = -10.0
 
     # Technical Indicator Parameters
-    RSI_LONG_ENTRY = 25
-    RSI_SHORT_ENTRY = 75
+    RSI_LONG_ENTRY = 30
+    RSI_SHORT_ENTRY = 70
     TREND_SMA_LENGTH = 200
 
     # Binance Futures Fee Rate (Maker 0.02%, Taker 0.05%. We use 0.05% for market orders)
