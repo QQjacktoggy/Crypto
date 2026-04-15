@@ -4,8 +4,13 @@ import logging
 
 logging.getLogger().setLevel(logging.CRITICAL)
 
-print("Starting 180 days backtest with Trend Filter...")
-engine = BacktestEngine(days=180)
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--days', type=int, default=180)
+args = parser.parse_args()
+
+print(f"Starting {args.days} days backtest with Trend Filter...")
+engine = BacktestEngine(days=args.days)
 engine.run()
 
 closed_trades = [t for t in engine.trades if t['type'] == 'close']
@@ -18,7 +23,7 @@ df['time'] = pd.to_datetime(df['time'])
 df['month'] = df['time'].dt.to_period('M')
 
 print("\n" + "="*50)
-print("📅 180-DAY MONTHLY PERFORMANCE (TREND FILTER)")
+print(f"📅 {args.days}-DAY MONTHLY PERFORMANCE (TREND FILTER)")
 print("="*50)
 
 monthly_stats = df.groupby('month').apply(
@@ -49,7 +54,7 @@ for _, row in monthly_stats.iterrows():
     print("-" * 30)
 
 print("="*50)
-print(f"📊 6-Month Total Net PnL: {cumulative_pnl:+.2f} USDT")
+print(f"📊 Total Net PnL ({args.days} Days): {cumulative_pnl:+.2f} USDT")
 print(f"🔥 Max Margin Usage: {engine.max_margin_usage:.2f} USDT")
 print(f"📉 Max Drawdown: {engine.max_drawdown*100:.2f}%")
 print("="*50)

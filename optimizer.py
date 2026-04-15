@@ -34,7 +34,7 @@ def run_simulation(base_capital, tier_margin_pct, leverage, tp_margin_roi, sl_gl
         config.RSI_SHORT_ENTRY = rsi_short
 
         # We need to recreate the engine so it uses the new configs
-        engine = BacktestEngine(days=180)
+        engine = BacktestEngine(days=365)
 
         import logging
         logger = logging.getLogger("src.engine_backtest")
@@ -100,14 +100,13 @@ def main():
     # The caching in engine_backtest.py uses pd.read_csv which should be fast enough,
     # but we can reduce combinations to run it faster.
 
-    # Very focused grid search to reduce runtime drastically
-    # We aim for ~450U net pnl (300% roi on 150U initial balance)
-    # This requires higher leverage or larger margin sizes
-    tier_margin_pcts = [0.15]
-    leverages = [5, 10]
-    tp_margin_rois = [0.15, 0.30]
-    sl_global_caps = [-0.20]
-    rsi_entries = [(30, 70)] # relax entry slightly for more trades
+    # 365 Days Grid search parameters
+    # Focusing on safer margin % and tighter global caps to survive 1-year swings
+    tier_margin_pcts = [0.03]
+    leverages = [4]
+    tp_margin_rois = [0.10, 0.15]
+    sl_global_caps = [-0.10, -0.15]
+    rsi_entries = [(25, 75)]
 
     # Calculate total combinations
     total_combs = len(tier_margin_pcts) * len(leverages) * len(tp_margin_rois) * len(sl_global_caps) * len(rsi_entries)
