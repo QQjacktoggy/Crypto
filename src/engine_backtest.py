@@ -31,8 +31,9 @@ class BacktestEngine:
         # Data Cache
         self.data_frames = {}
 
-    def fetch_historical_data(self, symbol):
-        data_path = f"data/{symbol.replace('/', '_')}_{self.days}d_{config.TIMEFRAME}.csv"
+    def fetch_historical_data(self, symbol, timeframe=config.TIMEFRAME, limit_fetch_days=None):
+        days_to_fetch = limit_fetch_days if limit_fetch_days else self.days
+        data_path = f"data/{symbol.replace('/', '_')}_{days_to_fetch}d_{timeframe}.csv"
 
         if os.path.exists(data_path):
             logger.info(f"Loading cached data from {data_path}")
@@ -40,21 +41,21 @@ class BacktestEngine:
             df['timestamp'] = pd.to_datetime(df['timestamp'])
             return df
 
-        logger.info(f"Fetching {self.days} days of data for {symbol}...")
+        logger.info(f"Fetching {days_to_fetch} days of data for {symbol} ({timeframe})...")
         end_time = self.exchange.milliseconds()
-        start_time = end_time - (self.days * 24 * 60 * 60 * 1000)
+        start_time = end_time - (days_to_fetch * 24 * 60 * 60 * 1000)
 
         all_ohlcv = []
         current_time = start_time
 
         while current_time < end_time:
             try:
-                ohlcv = self.exchange.fetch_ohlcv(symbol, config.TIMEFRAME, since=current_time, limit=100)
+                ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, since=current_time, limit=500)
                 if not ohlcv:
                     break
                 all_ohlcv.extend(ohlcv)
                 current_time = ohlcv[-1][0] + 1
-                time.sleep(0.5) # Rate limit
+                time.sleep(0.2) # Rate limit
             except Exception as e:
                 logger.error(f"Error fetching data for {symbol}: {e}")
                 break
@@ -172,6 +173,20 @@ class BacktestEngine:
             logger.error("No data available to backtest.")
             return
 
+        logger.info("Fetching and calculating Daily Trend Filter (BTC 200 SMA)...")
+        # Fetch 200 extra days so we have enough data to calculate the 200 SMA right from the start of our backtest period
+        trend_days = self.days + 200
+        df_daily = self.fetch_historical_data('BTC/USDT:USDT', timeframe='1d', limit_fetch_days=trend_days)
+        if not df_daily.empty:
+            df_daily = self.signal_engine.calculate_daily_indicators(df_daily)
+            df_daily.set_index('timestamp', inplace=True)
+            # Forward fill the daily regime so we can look it up at any 5m timestamp easily
+            # We shift the daily data by 1 so we only use yesterday's close to determine today's regime (avoid lookahead bias)
+            df_daily_shifted = df_daily.shift(1)
+        else:
+            logger.warning("Failed to fetch daily data for trend filtering.")
+            df_daily_shifted = pd.DataFrame()
+
         # Find common timestamps
         common_timestamps = pd.Series(list(indicators.values())[0].index)
         for df in indicators.values():
@@ -183,6 +198,14 @@ class BacktestEngine:
         # Start from index 20
         for i in range(20, len(common_timestamps)):
             timestamp = common_timestamps.iloc[i]
+
+            # Look up current market regime
+            current_regime = 'neutral'
+            if not df_daily_shifted.empty:
+                # Find the latest daily bar that occurred before or exactly at our current 5m timestamp
+                daily_slice = df_daily_shifted.loc[:timestamp]
+                if not daily_slice.empty:
+                    current_regime = self.signal_engine.get_market_regime(daily_slice)
 
             # 1. Cooldown Check
             symbols_to_remove_cooldown = []
@@ -246,10 +269,14 @@ class BacktestEngine:
                     df_slice = indicators[symbol].loc[:timestamp]
                     current_price = indicators[symbol].loc[timestamp]['close']
 
-                    if self.signal_engine.check_tier_1_long_signal(symbol, df_slice):
+                    # Apply Trend Filter: Only go long if bull or neutral, only go short if bear or neutral
+                    can_go_long = current_regime in ['bull', 'neutral']
+                    can_go_short = current_regime in ['bear', 'neutral']
+
+                    if can_go_long and self.signal_engine.check_tier_1_long_signal(symbol, df_slice):
                         exec_price = current_price * 1.0005
                         self.execute_order(symbol, config.TIER_1_MARGIN, exec_price, timestamp, 1, 'long')
-                    elif self.signal_engine.check_tier_1_short_signal(symbol, df_slice):
+                    elif can_go_short and self.signal_engine.check_tier_1_short_signal(symbol, df_slice):
                         exec_price = current_price * 0.9995
                         self.execute_order(symbol, config.TIER_1_MARGIN, exec_price, timestamp, 1, 'short')
 

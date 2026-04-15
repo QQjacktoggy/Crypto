@@ -58,6 +58,44 @@ class SignalEngine:
 
         return df
 
+    def calculate_daily_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Calculates long-term indicators on daily data for trend filtering.
+        Specifically adds a 200 SMA.
+        """
+        if df.empty or len(df) < 200:
+            return df
+
+        df.ta.sma(length=200, append=True)
+        return df
+
+    def get_market_regime(self, df_daily: pd.DataFrame) -> str:
+        """
+        Determines the current market regime (bull or bear) based on the 1D 200SMA.
+        Returns 'bull', 'bear', or 'neutral' (if insufficient data).
+        """
+        if df_daily.empty or len(df_daily) < 1:
+            return 'neutral'
+
+        latest = df_daily.iloc[-1]
+        sma_col = [c for c in df_daily.columns if c.startswith('SMA_200')]
+
+        if not sma_col:
+            return 'neutral'
+
+        sma_val = latest[sma_col[0]]
+        close_val = latest['close']
+
+        if pd.isna(sma_val):
+            return 'neutral'
+
+        if close_val > sma_val:
+            return 'bull'
+        elif close_val < sma_val:
+            return 'bear'
+
+        return 'neutral'
+
     def check_tier_1_long_signal(self, symbol: str, df: pd.DataFrame) -> bool:
         """
         Checks if conditions for Tier 1 Long entry are met.
