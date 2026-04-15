@@ -20,7 +20,7 @@ class Config:
 
     # --- Trading Parameters ---
     BASE_CAPITAL = 150.0  # USDT
-    MAX_ACTIVE_TRADES = 3 # Allow up to 3 concurrent trades
+    MAX_ACTIVE_TRADES = 4 # Allow up to 4 concurrent trades to fully utilize 150 USDT (4 * 35 = 140)
 
     # Target symbols for multi-asset scanning (Spot)
     SYMBOLS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'DOGE/USDT', 'XRP/USDT']
