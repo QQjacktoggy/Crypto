@@ -110,7 +110,6 @@ def run_single_iteration(iteration_num, params, days=365):
 
         engine = BacktestEngine(days=days, param_overrides=full_params)
         engine.run()
-        engine.run()
 
         monthly_data = engine.get_monthly_pnl_report()
         closed_trades = [t for t in engine.trades if t['type'] == 'close']
