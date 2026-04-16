@@ -87,8 +87,9 @@ class SignalEngine:
         """
         Calculates required technical indicators using pandas-ta.
         Adds RSI, Bollinger Bands, MACD, EMA crossover, and ATR.
-        Requires at least 30 candles so all entry checks have enough history
-        after indicator warm-up and rolling volume calculations.
+        Requires at least 30 candles so the 20-period Bollinger / volume windows,
+        14-period RSI / ATR, and crossover checks all have enough warm-up history
+        before the first entry evaluation.
         """
         if df.empty or len(df) < 30:
             return df
@@ -211,7 +212,11 @@ class SignalEngine:
 
     def check_donchian_long_signal(self, symbol: str, df: pd.DataFrame, df_hourly: pd.DataFrame = None) -> bool:
         """
-        Phase 6 long entry: Donchian breakout with optional hourly trend alignment.
+        Returns True when a long Donchian breakout entry is valid.
+
+        symbol: instrument name used for optional AI confirmation.
+        df: current 5m indicator dataframe slice.
+        df_hourly: optional shifted 1H indicator dataframe slice for trend filtering.
         """
         if df.empty or len(df) < max(30, int(self.get_param('DONCHIAN_LENGTH')) + 1):
             return False
@@ -251,7 +256,11 @@ class SignalEngine:
 
     def check_donchian_short_signal(self, symbol: str, df: pd.DataFrame, df_hourly: pd.DataFrame = None) -> bool:
         """
-        Phase 6 short entry: Donchian breakdown with optional hourly trend alignment.
+        Returns True when a short Donchian breakdown entry is valid.
+
+        symbol: instrument name used for optional AI confirmation.
+        df: current 5m indicator dataframe slice.
+        df_hourly: optional shifted 1H indicator dataframe slice for trend filtering.
         """
         if df.empty or len(df) < max(30, int(self.get_param('DONCHIAN_LENGTH')) + 1):
             return False
@@ -291,7 +300,11 @@ class SignalEngine:
 
     def should_exit_trend_position(self, df: pd.DataFrame, df_hourly: pd.DataFrame, direction: str) -> bool:
         """
-        Phase 7 trend exit: close when higher-timeframe trend flips or price loses Donchian mid.
+        Returns True when a trend-following position should be exited.
+
+        df: current 5m indicator dataframe slice.
+        df_hourly: shifted 1H indicator dataframe slice for trend-state checks.
+        direction: current position direction, either 'long' or 'short'.
         """
         if df.empty:
             return False

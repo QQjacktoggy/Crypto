@@ -1,13 +1,11 @@
 """
 optimize_phase67_donchian.py - Phase 6 + 7 optimizer
 
-Phase 6:
-1. Donchian breakout entries
-2. Multi-timeframe 1H trend confirmation
+Phase 6 in the optimization roadmap means replacing BB-style breakout ideas with
+Donchian channel breakouts plus 1H trend confirmation.
 
-Phase 7:
-3. Trend pyramiding instead of adverse DCA for breakout positions
-4. Trend-specific exits
+Phase 7 means managing those trend positions with pyramiding and trend-specific
+exits instead of the usual adverse DCA flow used by mean-reversion trades.
 """
 
 import logging
