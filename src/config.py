@@ -65,10 +65,14 @@ class Config:
     MACD_FAST = 12
     MACD_SLOW = 26
     MACD_SIGNAL = 9
+    MACD_LONG_RSI_MAX = 45
+    MACD_SHORT_RSI_MIN = 55
 
     # --- EMA Crossover Strategy Parameters ---
     EMA_FAST = 9
     EMA_SLOW = 21
+    EMA_LONG_RSI_MAX = 50
+    EMA_SHORT_RSI_MIN = 50
 
     # --- Funding Rate Simulation ---
     FUNDING_RATE = 0.0001   # 0.01% every 8 hours (realistic average)

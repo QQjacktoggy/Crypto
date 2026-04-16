@@ -25,7 +25,8 @@ class BacktestEngine:
             'SL_GLOBAL_CAP_PCT', 'TIER_MARGIN_PCT', 'LEVERAGE', 'MAX_ACTIVE_TRADES',
             'TIER_2_DEV_PCT', 'TIER_3_DEV_PCT', 'TRAILING_TP_ACTIVATE_ROI',
             'TRAILING_TP_CALLBACK_ROI', 'FUNDING_RATE', 'COOLDOWN_CANDLES',
-            'EMA_FAST', 'EMA_SLOW', 'MACD_FAST', 'MACD_SLOW', 'MACD_SIGNAL',
+            'TIER_1_MARGIN', 'EMA_FAST', 'EMA_SLOW', 'MACD_FAST', 'MACD_SLOW', 'MACD_SIGNAL',
+            'MACD_LONG_RSI_MAX', 'MACD_SHORT_RSI_MIN', 'EMA_LONG_RSI_MAX', 'EMA_SHORT_RSI_MIN',
             'TREND_SMA_LENGTH', 'FEE_RATE', 'COMPOUND_MODE', 'BASE_CAPITAL',
             'SIGNAL_MODE', 'BB_ENTRY_BUFFER_PCT', 'VOLUME_FILTER_MULT',
             'VOLATILITY_ADAPTIVE_ENTRY', 'ATR_VOL_LOOKBACK',
@@ -300,7 +301,7 @@ class BacktestEngine:
         def get_dynamic_margin():
             if self.params['COMPOUND_MODE']:
                 return self.current_balance * self.params['TIER_MARGIN_PCT']
-            return config.TIER_1_MARGIN
+            return self.params['TIER_1_MARGIN']
 
         # Funding rate tracking
         last_funding_hour = -1

@@ -210,9 +210,10 @@ class SignalEngine:
                 macdh_val = latest[macdh_col[0]]
                 macdh_prev = prev[macdh_col[0]]
                 if not pd.isna(macdh_val) and not pd.isna(macdh_prev):
-                    # Keep a broader RSI threshold for crossover signals because the
-                    # MACD histogram flip already acts as directional confirmation.
-                    macd_signal = (macdh_prev < 0 and macdh_val > 0 and rsi_val < 45)
+                    macd_signal = (
+                        macdh_prev < 0 and macdh_val > 0 and
+                        rsi_val < self.get_param('MACD_LONG_RSI_MAX')
+                    )
 
             # Strategy 3: EMA Crossover + RSI confirmation
             ema_signal = False
@@ -222,7 +223,10 @@ class SignalEngine:
                 ema_fast_prev = prev[ema_fast_col[0]]
                 ema_slow_prev = prev[ema_slow_col[0]]
                 if not any(pd.isna(v) for v in [ema_fast, ema_slow, ema_fast_prev, ema_slow_prev]):
-                    ema_signal = (ema_fast_prev <= ema_slow_prev and ema_fast > ema_slow and rsi_val < 50)
+                    ema_signal = (
+                        ema_fast_prev <= ema_slow_prev and ema_fast > ema_slow and
+                        rsi_val < self.get_param('EMA_LONG_RSI_MAX')
+                    )
 
             traditional_signal = bb_signal or macd_signal or ema_signal
 
@@ -294,9 +298,10 @@ class SignalEngine:
                 macdh_val = latest[macdh_col[0]]
                 macdh_prev = prev[macdh_col[0]]
                 if not pd.isna(macdh_val) and not pd.isna(macdh_prev):
-                    # Keep a broader RSI threshold for crossover signals because the
-                    # MACD histogram flip already acts as directional confirmation.
-                    macd_signal = (macdh_prev > 0 and macdh_val < 0 and rsi_val > 55)
+                    macd_signal = (
+                        macdh_prev > 0 and macdh_val < 0 and
+                        rsi_val > self.get_param('MACD_SHORT_RSI_MIN')
+                    )
 
             # Strategy 3: EMA Crossover + RSI confirmation
             ema_signal = False
@@ -306,7 +311,10 @@ class SignalEngine:
                 ema_fast_prev = prev[ema_fast_col[0]]
                 ema_slow_prev = prev[ema_slow_col[0]]
                 if not any(pd.isna(v) for v in [ema_fast, ema_slow, ema_fast_prev, ema_slow_prev]):
-                    ema_signal = (ema_fast_prev >= ema_slow_prev and ema_fast < ema_slow and rsi_val > 50)
+                    ema_signal = (
+                        ema_fast_prev >= ema_slow_prev and ema_fast < ema_slow and
+                        rsi_val > self.get_param('EMA_SHORT_RSI_MIN')
+                    )
 
             traditional_signal = bb_signal or macd_signal or ema_signal
 
