@@ -22,6 +22,8 @@
 10. [最終最新結論](#10-最終最新結論)
 11. [Phase 5: Regime Breakout / Trend Following](#11-phase-5-regime-breakout--trend-following)
 12. [最新最終結論（Phase 5 後）](#12-最新最終結論phase-5-後)
+13. [Phase 6 + 7: Donchian / 多時間框架 / 趨勢加碼](#13-phase-6--7-donchian--多時間框架--趨勢加碼)
+14. [最新最終結論（Phase 7 後）](#14-最新最終結論phase-7-後)
 
 ---
 
@@ -568,5 +570,98 @@ SL_GLOBAL_CAP_PCT = -0.12
 ### 最後一句話
 
 > 我已經把 **Phase 5 breakout / trend-following** 也做完並回測了。  
-> 結果證明：**目前最佳解仍然是 Phase 3 的 +41.21 USDT/year。**  
-> 下一輪如果要再做，我建議不要再沿用 BB breakout，而是直接進 **Phase 6：Donchian / 多時間框架 / 趨勢加碼**。
+> 結果證明：**目前最佳解仍然是 Phase 3 的 +41.21 USDT/year。**
+
+---
+
+## 13. Phase 6 + 7: Donchian / 多時間框架 / 趨勢加碼
+
+### 本輪新增邏輯
+
+這一輪把你問的 **phase 6 + phase 7 一次合併** 做掉，核心結構是：
+
+1. **Phase 6：Donchian breakout**
+   - 用 Donchian channel 取代 BB breakout
+   - bull / bear regime 才允許趨勢突破單
+
+2. **Phase 6：1H 多時間框架濾網**
+   - 5m 做執行
+   - 1H EMA fast/slow 做趨勢確認
+
+3. **Phase 7：trend pyramiding**
+   - 對 Donchian 趨勢單，不再用逆勢 DCA
+   - 改成順勢獲利後才加碼
+
+4. **Phase 7：trend exit**
+   - 可在 1H 趨勢翻轉時提前出場
+   - 可選擇跌回 / 漲回 Donchian 中線時離場
+
+### Round 6+7 結果排名
+
+| 排名 | Iter | PnL | 最終資金 | 勝率 | 最大回撤 | 交易數 | 核心設定 |
+|:----:|:----:|----:|---------:|-----:|--------:|------:|----------|
+| 🥇1 | 1 | **+41.21** | **191.58** | 70.8% | 65.2% | 72 | 控制組：不開 Donchian |
+| 🥈2 | 2 | **+41.21** | **191.58** | 70.8% | 65.2% | 72 | Donchian 開 / Len 20 / 1H 12-36 / Pyramid 2 |
+| 🥉3 | 3 | **+41.21** | **191.58** | 70.8% | 65.2% | 72 | Donchian 開 / Len 24 / 1H 10-30 / Pyramid 2 |
+| 4 | 7 | **+41.21** | **191.58** | 70.8% | 65.2% | 72 | Donchian 開 / Len 55 / Pyramid 1 |
+| 5 | 10 | **+41.21** | **191.58** | 70.8% | 65.2% | 72 | Donchian 開 / Len 40 / Pyramid 1 |
+| 6 | 5 | +1.43 | 151.86 | 65.5% | 67.5% | 58 | Donchian 開 / 5x / 1H 8-24 / Pyramid 2 |
+| 7 | 8 | -6.44 | 143.96 | 58.3% | 67.4% | 60 | Donchian 開 / Len 30 / 高倉位 |
+| 8 | 9 | -9.42 | 140.86 | 60.4% | 62.4% | 53 | Donchian 開 / Len 18 / 5x |
+| 9 | 4 | -23.96 | 126.37 | 57.1% | 66.6% | 56 | Donchian 開 / Len 30 / Pyramid 1 |
+| 10 | 6 | -38.15 | 112.17 | 54.5% | 69.0% | 55 | Donchian 開 / multi 模式 |
+
+### 本輪結論
+
+1. **phase 6 + 7 仍然沒有打破 +41.21 USDT 的歷史最佳**
+   - 最佳結果依然是控制組
+   - 400U/年目標仍未接近
+
+2. **有 4 組 Donchian 參數與控制組結果完全相同**
+   - PnL、交易數、勝率都一致
+   - 這代表這些組合下，Donchian 路徑幾乎沒有真正接管策略，主體仍是原本均值回歸邏輯
+
+3. **真正有觸發 Donchian/1H/pyramiding 的新結構中，最佳只做到 +1.43 USDT**
+   - 說明這一版趨勢加碼雖然比 phase 5 更接近可用
+   - 但 edge 仍不足以超越 phase 3
+
+4. **Donchian 比 BB breakout 更合理，但目前還不夠強**
+   - 至少沒有像 phase 5 那樣大幅全面退化
+   - 但也沒有明顯擴大利潤上限
+
+---
+
+## 14. 最新最終結論（Phase 7 後）
+
+### 到目前為止最好的答案仍然是 Phase 3
+
+- **最佳年度獲利：+41.21 USDT**
+- 來自 **Phase 3 / Iteration 7**
+- **phase 6 + 7 合併後仍未突破**
+- **400U/年目標依然未達成**
+
+### 現在可以更明確地下結論
+
+1. **均值回歸主策略目前仍是最有效核心**
+2. **BB breakout 不夠好**
+3. **Donchian + 1H trend + pyramiding 比 BB breakout 更有研究價值**
+4. **但現階段仍未產生足夠強的新 alpha**
+
+### 如果還要繼續，最值得做的下一步
+
+下一輪我建議不要再只是調 Donchian 參數，而是直接往下面做：
+
+1. **分離 mean reversion 與 trend book**
+   - 不同持倉邏輯、不同加碼邏輯、不同出場邏輯
+2. **讓趨勢單完全不用 DCA 參數體系**
+   - 趨勢單改成專屬 pyramiding 倉位模型
+3. **加入更高級 trend filter**
+   - ADX / slope / higher-high higher-low 結構
+4. **延長資料區間到 2-3 年**
+   - 避免只對單一年份市場特性調整
+
+### 最後一句話
+
+> 你要我一次做 **phase 6 跟 7**，我已經直接合併做完了。  
+> 結果是：**Donchian / 多時間框架 / 趨勢加碼 比 phase 5 更合理，但仍然沒有打敗 phase 3 的 +41.21 USDT/year。**  
+> 如果你要，我下一步可以直接做 **Phase 8：雙策略引擎（mean reversion + trend book 分離）**。
