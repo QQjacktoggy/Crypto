@@ -81,10 +81,14 @@ class Config:
     # 'classic': RSI + Bollinger Bands only (original, high win-rate)
     # 'multi': RSI+BB, MACD, EMA crossover (more trades, potentially more risk)
     SIGNAL_MODE = 'classic'
+    BB_ENTRY_BUFFER_PCT = 0.0   # Allow entries slightly inside Bollinger band (0.005 = 0.5%)
+    VOLUME_FILTER_MULT = 0.70   # Volume must be >= vol_sma_20 * multiplier
 
     # --- Cooldown Settings ---
     COOLDOWN_CANDLES = 12   # Minimum candles (1 hour) before re-entry after SL
     MAX_CONSECUTIVE_LOSSES = 3  # Pause symbol after 3 consecutive losses
+    ENABLE_MONTHLY_CIRCUIT_BREAKER = True
+    MONTHLY_LOSS_LIMIT_PCT = -0.20
 
     # --- Dynamic ATR-based TP/SL ---
     DYNAMIC_TPSL = False         # Use ATR-based dynamic TP/SL instead of fixed ROI
@@ -94,6 +98,10 @@ class Config:
     ATR_TP_MAX_ROI = 0.40        # Maximum TP ROI cap (40%)
     ATR_SL_MIN_ROI = -0.15       # Minimum SL ROI floor (-15%)
     ATR_SL_MAX_ROI = -0.70       # Maximum SL ROI cap (-70%)
+    DYNAMIC_TIER_DEVIATIONS = False
+    TIER_2_ATR_DEV_MULT = 2.0    # Convert ATR/current_price into Tier 2 deviation %
+    TIER_3_ATR_DEV_MULT = 3.5    # Convert ATR/current_price into Tier 3 deviation %
+    MIN_TIER_DEV_PCT = 0.004     # Do not allow tiers to trigger too tightly
 
     # Timeframes
     TIMEFRAME = '5m'

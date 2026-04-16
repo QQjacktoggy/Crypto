@@ -7,8 +7,12 @@ from src.config import config
 logger = logging.getLogger(__name__)
 
 class SignalEngine:
-    def __init__(self):
+    def __init__(self, params=None):
+        self.params = params or {}
         self.ai_url = config.AI_API_URL
+
+    def get_param(self, name: str):
+        return self.params.get(name, getattr(config, name))
 
     def get_ai_prediction(self, symbol: str, df: pd.DataFrame) -> float:
         """
@@ -55,11 +59,16 @@ class SignalEngine:
         df.ta.bbands(length=20, std=2, append=True)
 
         # Calculate MACD
-        df.ta.macd(fast=config.MACD_FAST, slow=config.MACD_SLOW, signal=config.MACD_SIGNAL, append=True)
+        df.ta.macd(
+            fast=self.get_param('MACD_FAST'),
+            slow=self.get_param('MACD_SLOW'),
+            signal=self.get_param('MACD_SIGNAL'),
+            append=True,
+        )
 
         # Calculate EMAs for crossover strategy
-        df.ta.ema(length=config.EMA_FAST, append=True)
-        df.ta.ema(length=config.EMA_SLOW, append=True)
+        df.ta.ema(length=self.get_param('EMA_FAST'), append=True)
+        df.ta.ema(length=self.get_param('EMA_SLOW'), append=True)
 
         # Calculate ATR for volatility-based sizing
         df.ta.atr(length=14, append=True)
@@ -83,7 +92,7 @@ class SignalEngine:
         if len(df) > 50:
             df.ta.sma(length=50, append=True)
 
-        sma_len = config.TREND_SMA_LENGTH
+        sma_len = self.get_param('TREND_SMA_LENGTH')
         if len(df) >= sma_len:
             df.ta.sma(length=sma_len, append=True)
 
@@ -100,7 +109,7 @@ class SignalEngine:
         latest = df_daily.iloc[-1]
 
         # Try SMAs from longest to shortest
-        for sma_prefix in [f'SMA_{config.TREND_SMA_LENGTH}', 'SMA_50', 'SMA_20']:
+        for sma_prefix in [f"SMA_{self.get_param('TREND_SMA_LENGTH')}", 'SMA_50', 'SMA_20']:
             sma_col = [c for c in df_daily.columns if c.startswith(sma_prefix)]
             if sma_col:
                 sma_val = latest[sma_col[0]]
@@ -120,7 +129,7 @@ class SignalEngine:
         signal_mode: 'classic' (RSI+BB only) or 'multi' (RSI+BB, MACD, EMA crossover)
         """
         if signal_mode is None:
-            signal_mode = config.SIGNAL_MODE
+            signal_mode = self.get_param('SIGNAL_MODE')
 
         if df.empty or len(df) < 30:
             return False
@@ -132,8 +141,8 @@ class SignalEngine:
         bbl_col = [c for c in df.columns if c.startswith('BBL_')]
         macd_col = [c for c in df.columns if c.startswith('MACD_') and not c.startswith('MACDs_') and not c.startswith('MACDh_')]
         macdh_col = [c for c in df.columns if c.startswith('MACDh_')]
-        ema_fast_col = [c for c in df.columns if c == f'EMA_{config.EMA_FAST}']
-        ema_slow_col = [c for c in df.columns if c == f'EMA_{config.EMA_SLOW}']
+        ema_fast_col = [c for c in df.columns if c == f"EMA_{self.get_param('EMA_FAST')}"]
+        ema_slow_col = [c for c in df.columns if c == f"EMA_{self.get_param('EMA_SLOW')}"]
 
         if not rsi_col:
             return False
@@ -148,7 +157,8 @@ class SignalEngine:
             bbl_val = latest[bbl_col[0]]
             close_val = latest['close']
             if not pd.isna(bbl_val):
-                bb_signal = (rsi_val < config.RSI_LONG_ENTRY and close_val <= bbl_val)
+                bb_buffer = 1 + self.get_param('BB_ENTRY_BUFFER_PCT')
+                bb_signal = (rsi_val < self.get_param('RSI_LONG_ENTRY') and close_val <= bbl_val * bb_buffer)
 
         if signal_mode == 'classic':
             traditional_signal = bb_signal
@@ -178,7 +188,7 @@ class SignalEngine:
         if 'vol_sma_20' in df.columns:
             vol_sma = latest['vol_sma_20']
             if not pd.isna(vol_sma) and vol_sma > 0:
-                vol_filter = latest['volume'] >= vol_sma * 0.7
+                vol_filter = latest['volume'] >= vol_sma * self.get_param('VOLUME_FILTER_MULT')
 
         if not (traditional_signal and vol_filter):
             return False
@@ -200,7 +210,7 @@ class SignalEngine:
         signal_mode: 'classic' (RSI+BB only) or 'multi' (RSI+BB, MACD, EMA crossover)
         """
         if signal_mode is None:
-            signal_mode = config.SIGNAL_MODE
+            signal_mode = self.get_param('SIGNAL_MODE')
 
         if df.empty or len(df) < 30:
             return False
@@ -211,8 +221,8 @@ class SignalEngine:
         rsi_col = [c for c in df.columns if c.startswith('RSI_')]
         bbu_col = [c for c in df.columns if c.startswith('BBU_')]
         macdh_col = [c for c in df.columns if c.startswith('MACDh_')]
-        ema_fast_col = [c for c in df.columns if c == f'EMA_{config.EMA_FAST}']
-        ema_slow_col = [c for c in df.columns if c == f'EMA_{config.EMA_SLOW}']
+        ema_fast_col = [c for c in df.columns if c == f"EMA_{self.get_param('EMA_FAST')}"]
+        ema_slow_col = [c for c in df.columns if c == f"EMA_{self.get_param('EMA_SLOW')}"]
 
         if not rsi_col:
             return False
@@ -227,7 +237,8 @@ class SignalEngine:
             bbu_val = latest[bbu_col[0]]
             close_val = latest['close']
             if not pd.isna(bbu_val):
-                bb_signal = (rsi_val > config.RSI_SHORT_ENTRY and close_val >= bbu_val)
+                bb_buffer = 1 - self.get_param('BB_ENTRY_BUFFER_PCT')
+                bb_signal = (rsi_val > self.get_param('RSI_SHORT_ENTRY') and close_val >= bbu_val * bb_buffer)
 
         if signal_mode == 'classic':
             traditional_signal = bb_signal
@@ -257,7 +268,7 @@ class SignalEngine:
         if 'vol_sma_20' in df.columns:
             vol_sma = latest['vol_sma_20']
             if not pd.isna(vol_sma) and vol_sma > 0:
-                vol_filter = latest['volume'] >= vol_sma * 0.7
+                vol_filter = latest['volume'] >= vol_sma * self.get_param('VOLUME_FILTER_MULT')
 
         if not (traditional_signal and vol_filter):
             return False

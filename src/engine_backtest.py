@@ -17,7 +17,6 @@ class BacktestEngine:
         self.symbols = symbols if symbols else config.SYMBOLS
         self.days = days
         self.exchange = ccxt.okx({'enableRateLimit': True})
-        self.signal_engine = SignalEngine()
 
         # Apply parameter overrides for optimization
         self.params = {}
@@ -26,17 +25,24 @@ class BacktestEngine:
             'SL_GLOBAL_CAP_PCT', 'TIER_MARGIN_PCT', 'LEVERAGE', 'MAX_ACTIVE_TRADES',
             'TIER_2_DEV_PCT', 'TIER_3_DEV_PCT', 'TRAILING_TP_ACTIVATE_ROI',
             'TRAILING_TP_CALLBACK_ROI', 'FUNDING_RATE', 'COOLDOWN_CANDLES',
-            'EMA_FAST', 'EMA_SLOW', 'FEE_RATE', 'COMPOUND_MODE', 'BASE_CAPITAL',
-            'SIGNAL_MODE',
+            'EMA_FAST', 'EMA_SLOW', 'MACD_FAST', 'MACD_SLOW', 'MACD_SIGNAL',
+            'TREND_SMA_LENGTH', 'FEE_RATE', 'COMPOUND_MODE', 'BASE_CAPITAL',
+            'SIGNAL_MODE', 'BB_ENTRY_BUFFER_PCT', 'VOLUME_FILTER_MULT',
+            'MAX_CONSECUTIVE_LOSSES', 'ENABLE_MONTHLY_CIRCUIT_BREAKER',
+            'MONTHLY_LOSS_LIMIT_PCT', 'FUNDING_INTERVAL_HOURS',
             # Dynamic ATR-based TP/SL parameters
             'DYNAMIC_TPSL', 'ATR_TP_MULT', 'ATR_SL_MULT',
             'ATR_TP_MIN_ROI', 'ATR_TP_MAX_ROI', 'ATR_SL_MIN_ROI', 'ATR_SL_MAX_ROI',
+            'DYNAMIC_TIER_DEVIATIONS', 'TIER_2_ATR_DEV_MULT', 'TIER_3_ATR_DEV_MULT',
+            'MIN_TIER_DEV_PCT',
         ]
         for key in param_keys:
             if param_overrides and key in param_overrides:
                 self.params[key] = param_overrides[key]
             else:
                 self.params[key] = getattr(config, key)
+
+        self.signal_engine = SignalEngine(self.params)
 
         # State
         self.positions = {}
@@ -287,7 +293,7 @@ class BacktestEngine:
 
         # Funding rate tracking
         last_funding_hour = -1
-        funding_interval = config.FUNDING_INTERVAL_HOURS
+        funding_interval = self.params['FUNDING_INTERVAL_HOURS']
 
         # Track current month for snapshots
         current_month = None
@@ -306,10 +312,10 @@ class BacktestEngine:
                 self.monthly_circuit_breaker_active = False
             current_month = ts_month
 
-            # Check monthly loss circuit breaker: if balance dropped >20% from month start, stop new trades
-            if self.month_start_balance > 0:
+            # Check monthly loss circuit breaker
+            if self.params['ENABLE_MONTHLY_CIRCUIT_BREAKER'] and self.month_start_balance > 0:
                 month_loss_pct = (self.current_balance - self.month_start_balance) / self.month_start_balance
-                if month_loss_pct < -0.20:
+                if month_loss_pct < self.params['MONTHLY_LOSS_LIMIT_PCT']:
                     self.monthly_circuit_breaker_active = True
 
             # Apply funding rate every 8 hours
@@ -438,14 +444,32 @@ class BacktestEngine:
                             atr_val = None
 
                     if pos['tier'] == 1:
+                        tier_2_dev_pct = self.params['TIER_2_DEV_PCT']
+                        if self.params.get('DYNAMIC_TIER_DEVIATIONS') and atr_val and current_price > 0:
+                            tier_2_dev_pct = min(
+                                tier_2_dev_pct,
+                                max(
+                                    self.params['MIN_TIER_DEV_PCT'],
+                                    (atr_val / current_price) * self.params['TIER_2_ATR_DEV_MULT'],
+                                ),
+                            )
                         if self.signal_engine.check_tier_2_signal(
-                            current_price, avg_price, self.params['TIER_2_DEV_PCT'], direction, df_slice
+                            current_price, avg_price, tier_2_dev_pct, direction, df_slice
                         ):
                             exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
                             self.execute_order(symbol, margin_to_use, exec_price, timestamp, 2, direction, atr_value=atr_val)
                     elif pos['tier'] == 2:
+                        tier_3_dev_pct = self.params['TIER_3_DEV_PCT']
+                        if self.params.get('DYNAMIC_TIER_DEVIATIONS') and atr_val and current_price > 0:
+                            tier_3_dev_pct = min(
+                                tier_3_dev_pct,
+                                max(
+                                    self.params['MIN_TIER_DEV_PCT'],
+                                    (atr_val / current_price) * self.params['TIER_3_ATR_DEV_MULT'],
+                                ),
+                            )
                         if self.signal_engine.check_tier_3_signal(
-                            current_price, avg_price, self.params['TIER_3_DEV_PCT'], direction
+                            current_price, avg_price, tier_3_dev_pct, direction
                         ):
                             exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
                             self.execute_order(symbol, margin_to_use, exec_price, timestamp, 3, direction, atr_value=atr_val)
@@ -460,7 +484,7 @@ class BacktestEngine:
 
                     # Skip symbols with too many consecutive losses
                     # Use a time-based reset: consecutive loss counter resets after enough candles
-                    max_consec = config.MAX_CONSECUTIVE_LOSSES
+                    max_consec = self.params['MAX_CONSECUTIVE_LOSSES']
                     if self.consecutive_losses.get(symbol, 0) >= max_consec:
                         # Track candles since last loss for non-cooldown symbols
                         if symbol not in self.cooldown_candle_count:
