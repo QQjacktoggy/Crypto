@@ -129,6 +129,10 @@ class BacktestEngine:
 
         # Check if we have enough balance
         if self.current_balance < (margin_usdt + fee):
+            logger.info(
+                f"Skipping order for {symbol}: insufficient balance "
+                f"(need {margin_usdt + fee:.2f}, have {self.current_balance:.2f})"
+            )
             return  # Skip order if insufficient balance
 
         if symbol not in self.positions:

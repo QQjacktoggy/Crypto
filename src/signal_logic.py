@@ -210,6 +210,8 @@ class SignalEngine:
                 macdh_val = latest[macdh_col[0]]
                 macdh_prev = prev[macdh_col[0]]
                 if not pd.isna(macdh_val) and not pd.isna(macdh_prev):
+                    # Keep a broader RSI threshold for crossover signals because the
+                    # MACD histogram flip already acts as directional confirmation.
                     macd_signal = (macdh_prev < 0 and macdh_val > 0 and rsi_val < 45)
 
             # Strategy 3: EMA Crossover + RSI confirmation
@@ -292,6 +294,8 @@ class SignalEngine:
                 macdh_val = latest[macdh_col[0]]
                 macdh_prev = prev[macdh_col[0]]
                 if not pd.isna(macdh_val) and not pd.isna(macdh_prev):
+                    # Keep a broader RSI threshold for crossover signals because the
+                    # MACD histogram flip already acts as directional confirmation.
                     macd_signal = (macdh_prev > 0 and macdh_val < 0 and rsi_val > 55)
 
             # Strategy 3: EMA Crossover + RSI confirmation

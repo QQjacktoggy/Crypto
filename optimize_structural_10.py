@@ -9,12 +9,15 @@ Focus:
 
 import logging
 import sys
+import os
 from datetime import datetime
 
 logging.getLogger().setLevel(logging.CRITICAL)
 
 from src.engine_backtest import BacktestEngine
 from src.config import config
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 PARAM_SETS = [
@@ -235,7 +238,9 @@ def run_single_iteration(iteration_num, params, days=365):
         }
 
 
-def save_results(results, filename="/home/runner/work/Crypto/Crypto/optimization_round4_structural.txt"):
+def save_results(results, filename=None):
+    if filename is None:
+        filename = os.path.join(BASE_DIR, "optimization_round4_structural.txt")
     with open(filename, "w", encoding="utf-8") as f:
         f.write("Round 4 Structural Optimization Report\n")
         f.write(f"Generated: {datetime.now():%Y-%m-%d %H:%M:%S}\n")
