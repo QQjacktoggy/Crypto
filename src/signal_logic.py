@@ -87,6 +87,8 @@ class SignalEngine:
         """
         Calculates required technical indicators using pandas-ta.
         Adds RSI, Bollinger Bands, MACD, EMA crossover, and ATR.
+        Requires at least 30 candles so all entry checks have enough history
+        after indicator warm-up and rolling volume calculations.
         """
         if df.empty or len(df) < 30:
             return df
@@ -345,6 +347,11 @@ class SignalEngine:
         """
         if df.empty or len(df) < 2: return False
 
+        if self.get_param('MOMENTUM_GATED_DCA'):
+            atr_ratio = self.get_atr_ratio(df)
+            if atr_ratio is not None and atr_ratio > self.get_param('TIER_2_MAX_ATR_RATIO'):
+                return False
+
         rsi_col = [c for c in df.columns if c.startswith('RSI_')]
         if not rsi_col: return False
 
@@ -353,11 +360,6 @@ class SignalEngine:
 
         if pd.isna(latest_rsi) or pd.isna(prev_rsi):
             return False
-
-        if self.get_param('MOMENTUM_GATED_DCA'):
-            atr_ratio = self.get_atr_ratio(df)
-            if atr_ratio is not None and atr_ratio > self.get_param('TIER_2_MAX_ATR_RATIO'):
-                return False
 
         if direction == 'long':
             if current_price > avg_entry_price * (1 - dev_pct):

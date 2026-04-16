@@ -310,7 +310,8 @@ class BacktestEngine:
         # Track current month for snapshots
         current_month = None
 
-        # Start from index 30 (need enough data for indicators)
+        # Start from index 30 so signal checks always have enough warm-up candles
+        # for indicators plus rolling filters (e.g. BB, ATR, volume SMA).
         for i in range(30, len(common_timestamps)):
             timestamp = common_timestamps.iloc[i]
 
