@@ -14,6 +14,45 @@ class SignalEngine:
     def get_param(self, name: str):
         return self.params.get(name, getattr(config, name))
 
+    def get_atr_ratio(self, df: pd.DataFrame) -> float:
+        if df.empty:
+            return None
+        atr_cols = [c for c in df.columns if c.startswith('ATRr_')]
+        if not atr_cols:
+            return None
+        atr_col = atr_cols[0]
+        atr_series = df[atr_col].dropna()
+        if atr_series.empty:
+            return None
+
+        lookback = int(self.get_param('ATR_VOL_LOOKBACK'))
+        baseline_window = atr_series.tail(lookback)
+        if baseline_window.empty:
+            return None
+
+        baseline = baseline_window.median()
+        current_atr = atr_series.iloc[-1]
+        if pd.isna(current_atr) or pd.isna(baseline) or baseline <= 0:
+            return None
+        return current_atr / baseline
+
+    def get_entry_rsi_thresholds(self, df: pd.DataFrame):
+        long_threshold = self.get_param('RSI_LONG_ENTRY')
+        short_threshold = self.get_param('RSI_SHORT_ENTRY')
+
+        if not self.get_param('VOLATILITY_ADAPTIVE_ENTRY'):
+            return long_threshold, short_threshold
+
+        atr_ratio = self.get_atr_ratio(df)
+        if atr_ratio is None:
+            return long_threshold, short_threshold
+
+        if atr_ratio >= self.get_param('HIGH_VOL_THRESHOLD'):
+            return self.get_param('RSI_LONG_ENTRY_HIGH_VOL'), self.get_param('RSI_SHORT_ENTRY_HIGH_VOL')
+        if atr_ratio <= self.get_param('LOW_VOL_THRESHOLD'):
+            return self.get_param('RSI_LONG_ENTRY_LOW_VOL'), self.get_param('RSI_SHORT_ENTRY_LOW_VOL')
+        return long_threshold, short_threshold
+
     def get_ai_prediction(self, symbol: str, df: pd.DataFrame) -> float:
         """
         Sends historical data to the Colab AI API to get the predicted next close price.
@@ -151,6 +190,8 @@ class SignalEngine:
         if pd.isna(rsi_val):
             return False
 
+        long_rsi_threshold, _ = self.get_entry_rsi_thresholds(df)
+
         # Strategy 1: Original RSI + Bollinger Band (always active)
         bb_signal = False
         if bbl_col:
@@ -158,7 +199,7 @@ class SignalEngine:
             close_val = latest['close']
             if not pd.isna(bbl_val):
                 bb_buffer = 1 + self.get_param('BB_ENTRY_BUFFER_PCT')
-                bb_signal = (rsi_val < self.get_param('RSI_LONG_ENTRY') and close_val <= bbl_val * bb_buffer)
+                bb_signal = (rsi_val < long_rsi_threshold and close_val <= bbl_val * bb_buffer)
 
         if signal_mode == 'classic':
             traditional_signal = bb_signal
@@ -231,6 +272,8 @@ class SignalEngine:
         if pd.isna(rsi_val):
             return False
 
+        _, short_rsi_threshold = self.get_entry_rsi_thresholds(df)
+
         # Strategy 1: Original RSI + Bollinger Band (always active)
         bb_signal = False
         if bbu_col:
@@ -238,7 +281,7 @@ class SignalEngine:
             close_val = latest['close']
             if not pd.isna(bbu_val):
                 bb_buffer = 1 - self.get_param('BB_ENTRY_BUFFER_PCT')
-                bb_signal = (rsi_val > self.get_param('RSI_SHORT_ENTRY') and close_val >= bbu_val * bb_buffer)
+                bb_signal = (rsi_val > short_rsi_threshold and close_val >= bbu_val * bb_buffer)
 
         if signal_mode == 'classic':
             traditional_signal = bb_signal
@@ -296,19 +339,49 @@ class SignalEngine:
         latest_rsi = df.iloc[-1][rsi_col[0]]
         prev_rsi = df.iloc[-2][rsi_col[0]]
 
+        if pd.isna(latest_rsi) or pd.isna(prev_rsi):
+            return False
+
+        if self.get_param('MOMENTUM_GATED_DCA'):
+            atr_ratio = self.get_atr_ratio(df)
+            if atr_ratio is not None and atr_ratio > self.get_param('TIER_2_MAX_ATR_RATIO'):
+                return False
+
         if direction == 'long':
             if current_price > avg_entry_price * (1 - dev_pct):
                 return False
+            if self.get_param('MOMENTUM_GATED_DCA'):
+                return latest_rsi <= self.get_param('TIER_2_LONG_RSI_MAX') and latest_rsi >= prev_rsi
             return (latest_rsi < 35 or latest_rsi > prev_rsi)
         else:
             if current_price < avg_entry_price * (1 + dev_pct):
                 return False
+            if self.get_param('MOMENTUM_GATED_DCA'):
+                return latest_rsi >= self.get_param('TIER_2_SHORT_RSI_MIN') and latest_rsi <= prev_rsi
             return (latest_rsi > 65 or latest_rsi < prev_rsi)
 
-    def check_tier_3_signal(self, current_price: float, avg_entry_price: float, dev_pct: float, direction: str) -> bool:
+    def check_tier_3_signal(self, current_price: float, avg_entry_price: float, dev_pct: float, direction: str, df: pd.DataFrame = None) -> bool:
         """
         Checks if conditions for Tier 3 entry are met.
         """
+        if self.get_param('MOMENTUM_GATED_DCA') and df is not None and not df.empty:
+            atr_ratio = self.get_atr_ratio(df)
+            if atr_ratio is not None and atr_ratio > self.get_param('TIER_3_MAX_ATR_RATIO'):
+                return False
+
+            rsi_col = [c for c in df.columns if c.startswith('RSI_')]
+            if len(df) >= 2 and rsi_col:
+                latest_rsi = df.iloc[-1][rsi_col[0]]
+                prev_rsi = df.iloc[-2][rsi_col[0]]
+                if pd.isna(latest_rsi) or pd.isna(prev_rsi):
+                    return False
+                if direction == 'long':
+                    if latest_rsi > self.get_param('TIER_3_LONG_RSI_RECOVERY') or latest_rsi < prev_rsi:
+                        return False
+                else:
+                    if latest_rsi < self.get_param('TIER_3_SHORT_RSI_RECOVERY') or latest_rsi > prev_rsi:
+                        return False
+
         if direction == 'long':
             return current_price <= avg_entry_price * (1 - dev_pct)
         else:

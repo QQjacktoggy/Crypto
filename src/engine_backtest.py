@@ -28,13 +28,20 @@ class BacktestEngine:
             'EMA_FAST', 'EMA_SLOW', 'MACD_FAST', 'MACD_SLOW', 'MACD_SIGNAL',
             'TREND_SMA_LENGTH', 'FEE_RATE', 'COMPOUND_MODE', 'BASE_CAPITAL',
             'SIGNAL_MODE', 'BB_ENTRY_BUFFER_PCT', 'VOLUME_FILTER_MULT',
+            'VOLATILITY_ADAPTIVE_ENTRY', 'ATR_VOL_LOOKBACK',
+            'HIGH_VOL_THRESHOLD', 'LOW_VOL_THRESHOLD',
+            'RSI_LONG_ENTRY_HIGH_VOL', 'RSI_LONG_ENTRY_LOW_VOL',
+            'RSI_SHORT_ENTRY_HIGH_VOL', 'RSI_SHORT_ENTRY_LOW_VOL',
             'MAX_CONSECUTIVE_LOSSES', 'ENABLE_MONTHLY_CIRCUIT_BREAKER',
             'MONTHLY_LOSS_LIMIT_PCT', 'FUNDING_INTERVAL_HOURS',
             # Dynamic ATR-based TP/SL parameters
             'DYNAMIC_TPSL', 'ATR_TP_MULT', 'ATR_SL_MULT',
             'ATR_TP_MIN_ROI', 'ATR_TP_MAX_ROI', 'ATR_SL_MIN_ROI', 'ATR_SL_MAX_ROI',
             'DYNAMIC_TIER_DEVIATIONS', 'TIER_2_ATR_DEV_MULT', 'TIER_3_ATR_DEV_MULT',
-            'MIN_TIER_DEV_PCT',
+            'MIN_TIER_DEV_PCT', 'MOMENTUM_GATED_DCA',
+            'TIER_2_MAX_ATR_RATIO', 'TIER_3_MAX_ATR_RATIO',
+            'TIER_2_LONG_RSI_MAX', 'TIER_2_SHORT_RSI_MIN',
+            'TIER_3_LONG_RSI_RECOVERY', 'TIER_3_SHORT_RSI_RECOVERY',
         ]
         for key in param_keys:
             if param_overrides and key in param_overrides:
@@ -469,7 +476,7 @@ class BacktestEngine:
                                 ),
                             )
                         if self.signal_engine.check_tier_3_signal(
-                            current_price, avg_price, tier_3_dev_pct, direction
+                            current_price, avg_price, tier_3_dev_pct, direction, df_slice
                         ):
                             exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
                             self.execute_order(symbol, margin_to_use, exec_price, timestamp, 3, direction, atr_value=atr_val)

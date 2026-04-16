@@ -83,6 +83,14 @@ class Config:
     SIGNAL_MODE = 'classic'
     BB_ENTRY_BUFFER_PCT = 0.0   # Allow entries slightly inside Bollinger band (0.005 = 0.5%)
     VOLUME_FILTER_MULT = 0.70   # Volume must be >= vol_sma_20 * multiplier
+    VOLATILITY_ADAPTIVE_ENTRY = False
+    ATR_VOL_LOOKBACK = 100
+    HIGH_VOL_THRESHOLD = 1.30
+    LOW_VOL_THRESHOLD = 0.80
+    RSI_LONG_ENTRY_HIGH_VOL = 28
+    RSI_LONG_ENTRY_LOW_VOL = 36
+    RSI_SHORT_ENTRY_HIGH_VOL = 72
+    RSI_SHORT_ENTRY_LOW_VOL = 64
 
     # --- Cooldown Settings ---
     COOLDOWN_CANDLES = 12   # Minimum candles (1 hour) before re-entry after SL
@@ -102,6 +110,13 @@ class Config:
     TIER_2_ATR_DEV_MULT = 2.0    # Convert ATR/current_price into Tier 2 deviation %
     TIER_3_ATR_DEV_MULT = 3.5    # Convert ATR/current_price into Tier 3 deviation %
     MIN_TIER_DEV_PCT = 0.004     # Do not allow tiers to trigger too tightly
+    MOMENTUM_GATED_DCA = False
+    TIER_2_MAX_ATR_RATIO = 1.80
+    TIER_3_MAX_ATR_RATIO = 1.50
+    TIER_2_LONG_RSI_MAX = 38
+    TIER_2_SHORT_RSI_MIN = 62
+    TIER_3_LONG_RSI_RECOVERY = 32
+    TIER_3_SHORT_RSI_RECOVERY = 68
 
     # Timeframes
     TIMEFRAME = '5m'
