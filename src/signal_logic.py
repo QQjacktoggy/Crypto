@@ -14,6 +14,18 @@ class SignalEngine:
     def get_param(self, name: str):
         return self.params.get(name, getattr(config, name))
 
+    def get_min_signal_candles(self) -> int:
+        """
+        Minimum 5m candles required before any entry logic should run.
+        30 candles covers the 20-period Bollinger / volume windows, 14-period
+        RSI / ATR, and gives crossover-based signals extra warm-up margin.
+        """
+        return 30
+
+    def has_min_donchian_history(self, df: pd.DataFrame) -> bool:
+        required = max(self.get_min_signal_candles(), int(self.get_param('DONCHIAN_LENGTH')) + 1)
+        return not df.empty and len(df) >= required
+
     def get_atr_ratio(self, df: pd.DataFrame) -> float:
         if df.empty:
             return None
@@ -91,7 +103,7 @@ class SignalEngine:
         14-period RSI / ATR, and crossover checks all have enough warm-up history
         before the first entry evaluation.
         """
-        if df.empty or len(df) < 30:
+        if df.empty or len(df) < self.get_min_signal_candles():
             return df
 
         # Calculate RSI
@@ -218,7 +230,7 @@ class SignalEngine:
         df: current 5m indicator dataframe slice.
         df_hourly: optional shifted 1H indicator dataframe slice for trend filtering.
         """
-        if df.empty or len(df) < max(30, int(self.get_param('DONCHIAN_LENGTH')) + 1):
+        if not self.has_min_donchian_history(df):
             return False
 
         latest = df.iloc[-1]
@@ -262,7 +274,7 @@ class SignalEngine:
         df: current 5m indicator dataframe slice.
         df_hourly: optional shifted 1H indicator dataframe slice for trend filtering.
         """
-        if df.empty or len(df) < max(30, int(self.get_param('DONCHIAN_LENGTH')) + 1):
+        if not self.has_min_donchian_history(df):
             return False
 
         latest = df.iloc[-1]
@@ -379,7 +391,7 @@ class SignalEngine:
         Breakout long for bullish regimes: close above upper Bollinger band with
         trend/momentum alignment and stronger-than-average volume.
         """
-        if df.empty or len(df) < 30:
+        if df.empty or len(df) < self.get_min_signal_candles():
             return False
 
         latest = df.iloc[-1]
@@ -438,7 +450,7 @@ class SignalEngine:
         Breakout short for bearish regimes: close below lower Bollinger band with
         trend/momentum alignment and stronger-than-average volume.
         """
-        if df.empty or len(df) < 30:
+        if df.empty or len(df) < self.get_min_signal_candles():
             return False
 
         latest = df.iloc[-1]
@@ -500,7 +512,7 @@ class SignalEngine:
         if signal_mode is None:
             signal_mode = self.get_param('SIGNAL_MODE')
 
-        if df.empty or len(df) < 30:
+        if df.empty or len(df) < self.get_min_signal_candles():
             return False
 
         latest = df.iloc[-1]
