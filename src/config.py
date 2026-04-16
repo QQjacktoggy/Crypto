@@ -153,6 +153,10 @@ class Config:
     TIER_2_SHORT_RSI_MIN = 62
     TIER_3_LONG_RSI_RECOVERY = 32
     TIER_3_SHORT_RSI_RECOVERY = 68
+    # ATR spike entry block — when current ATR / median ATR exceeds the threshold,
+    # skip opening new positions for that symbol on that candle.
+    ENABLE_ATR_SPIKE_BLOCK = False
+    ATR_SPIKE_BLOCK_THRESHOLD = 2.0  # e.g. 2.0 means 2× the historical median ATR
 
     # Timeframes
     TIMEFRAME = '5m'

@@ -59,6 +59,7 @@ class BacktestEngine:
             'TIER_2_MAX_ATR_RATIO', 'TIER_3_MAX_ATR_RATIO',
             'TIER_2_LONG_RSI_MAX', 'TIER_2_SHORT_RSI_MIN',
             'TIER_3_LONG_RSI_RECOVERY', 'TIER_3_SHORT_RSI_RECOVERY',
+            'ENABLE_ATR_SPIKE_BLOCK', 'ATR_SPIKE_BLOCK_THRESHOLD',
         ]
         for key in param_keys:
             if param_overrides and key in param_overrides:
@@ -608,6 +609,12 @@ class BacktestEngine:
                         atr_val = indicators[symbol].loc[timestamp][atr_cols[0]]
                         if pd.isna(atr_val):
                             atr_val = None
+
+                    # ATR spike entry block: skip this symbol if volatility is extreme
+                    if self.params.get('ENABLE_ATR_SPIKE_BLOCK', False):
+                        atr_ratio_now = self.signal_engine.get_atr_ratio(df_slice)
+                        if atr_ratio_now is not None and atr_ratio_now > self.params.get('ATR_SPIKE_BLOCK_THRESHOLD', 2.0):
+                            continue
 
                     can_go_long = current_regime in ['bull', 'neutral']
                     can_go_short = current_regime in ['bear', 'neutral']
