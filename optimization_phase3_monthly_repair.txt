@@ -1,0 +1,85 @@
+Phase 3 Monthly Loss Repair Report
+Generated: 2026-04-16 16:48:20
+Goal: analyze phase-3 losing months and harden the strategy with existing engine features
+========================================================================
+
+Iteration #1 | Control
+  PnL=+41.21 | Final=191.58 | WR=70.8% | DD=65.2% | Trades=72 | LosingMonths=7 | WorstMonth=-45.45
+  Lev=7x Margin=0.090 VolAdapt=False DCAgate=False Breaker=-0.35 MaxLossStreak=5
+  Losing months: 2025-05(-11.68), 2025-07(-4.80), 2025-08(-16.33), 2025-09(-2.73), 2026-01(-45.45), 2026-03(-6.59), 2026-04(-13.91)
+
+Iteration #2 | VolAdapt+DCAgate-moderate
+  PnL=-8.92 | Final=141.43 | WR=62.7% | DD=66.2% | Trades=67 | LosingMonths=6 | WorstMonth=-42.58
+  Lev=7x Margin=0.090 VolAdapt=True DCAgate=True Breaker=-0.35 MaxLossStreak=5
+  Losing months: 2025-05(-18.22), 2025-07(-7.92), 2025-08(-14.45), 2025-09(-4.77), 2026-01(-42.58), 2026-04(-3.43)
+
+Iteration #3 | VolAdapt+DCAgate+tighter-breaker
+  PnL=-16.46 | Final=133.82 | WR=57.7% | DD=62.8% | Trades=52 | LosingMonths=7 | WorstMonth=-37.44
+  Lev=7x Margin=0.090 VolAdapt=True DCAgate=True Breaker=-0.25 MaxLossStreak=4
+  Losing months: 2025-05(-18.04), 2025-07(-3.98), 2025-08(-6.69), 2025-09(-8.99), 2026-01(-37.44), 2026-03(-9.46), 2026-04(-7.14)
+
+Iteration #4 | VolAdapt+DCAgate+risk-trim
+  PnL=-18.01 | Final=132.29 | WR=58.9% | DD=62.0% | Trades=56 | LosingMonths=8 | WorstMonth=-36.54
+  Lev=7x Margin=0.085 VolAdapt=True DCAgate=True Breaker=-0.25 MaxLossStreak=4
+  Losing months: 2025-05(-17.29), 2025-06(-1.84), 2025-07(-3.45), 2025-08(-5.84), 2025-09(-8.63), 2026-01(-36.54), 2026-03(-9.48), 2026-04(-3.03)
+
+Iteration #5 | Control+tighter-breaker
+  PnL=-17.54 | Final=132.75 | WR=57.1% | DD=57.8% | Trades=42 | LosingMonths=7 | WorstMonth=-33.27
+  Lev=7x Margin=0.090 VolAdapt=False DCAgate=False Breaker=-0.22 MaxLossStreak=4
+  Losing months: 2025-05(-11.61), 2025-07(-4.68), 2025-08(-15.91), 2025-09(-4.87), 2026-01(-33.27), 2026-03(-4.48), 2026-04(-7.01)
+
+Iteration #6 | Control+stricter-entry
+  PnL=-29.31 | Final=120.97 | WR=60.0% | DD=60.2% | Trades=55 | LosingMonths=8 | WorstMonth=-33.71
+  Lev=7x Margin=0.090 VolAdapt=False DCAgate=False Breaker=-0.25 MaxLossStreak=4
+  Losing months: 2025-05(-11.43), 2025-07(-5.65), 2025-08(-15.93), 2025-09(-4.87), 2025-12(-28.01), 2026-01(-33.71), 2026-03(-4.08), 2026-04(-6.39)
+
+Iteration #7 | Control+momentum-dca
+  PnL=-9.91 | Final=140.47 | WR=61.8% | DD=64.0% | Trades=55 | LosingMonths=7 | WorstMonth=-40.35
+  Lev=7x Margin=0.090 VolAdapt=False DCAgate=True Breaker=-0.28 MaxLossStreak=5
+  Losing months: 2025-05(-7.30), 2025-07(-4.24), 2025-08(-15.71), 2025-09(-3.16), 2026-01(-40.35), 2026-03(-8.01), 2026-04(-3.41)
+
+Iteration #8 | Control+voladapt
+  PnL=+1.45 | Final=151.82 | WR=65.5% | DD=65.2% | Trades=58 | LosingMonths=7 | WorstMonth=-40.88
+  Lev=7x Margin=0.090 VolAdapt=True DCAgate=False Breaker=-0.28 MaxLossStreak=4
+  Losing months: 2025-05(-11.99), 2025-07(-4.83), 2025-08(-16.43), 2025-09(-2.75), 2026-01(-40.88), 2026-03(-4.80), 2026-04(-11.03)
+
+Iteration #9 | Conservative-5x-structural
+  PnL=+21.63 | Final=172.03 | WR=67.2% | DD=66.2% | Trades=61 | LosingMonths=5 | WorstMonth=-30.45
+  Lev=5x Margin=0.085 VolAdapt=True DCAgate=True Breaker=-0.30 MaxLossStreak=5
+  Losing months: 2025-05(-13.93), 2025-08(-8.99), 2025-09(-13.27), 2026-01(-30.45), 2026-03(-5.02)
+
+Iteration #10 | Balanced-6x-repair
+  PnL=-11.86 | Final=138.44 | WR=60.3% | DD=67.7% | Trades=58 | LosingMonths=7 | WorstMonth=-32.11
+  Lev=6x Margin=0.085 VolAdapt=True DCAgate=True Breaker=-0.25 MaxLossStreak=4
+  Losing months: 2025-05(-8.61), 2025-07(-7.74), 2025-08(-17.37), 2025-09(-8.67), 2026-01(-32.11), 2026-03(-8.46), 2026-04(-0.51)
+
+========================================================================
+Control losing months by symbol
+========================================================================
+2025-05 | ETH/USDT:USDT | trades=1 | W/L=0/1 | pnl=-6.82
+2025-05 | DOGE/USDT:USDT | trades=1 | W/L=0/1 | pnl=-6.47
+2025-05 | BTC/USDT:USDT | trades=1 | W/L=0/1 | pnl=-2.38
+2025-05 | SOL/USDT:USDT | trades=1 | W/L=1/0 | pnl=+3.99
+2025-07 | DOGE/USDT:USDT | trades=1 | W/L=0/1 | pnl=-5.11
+2025-07 | SOL/USDT:USDT | trades=1 | W/L=0/1 | pnl=-4.13
+2025-07 | BTC/USDT:USDT | trades=1 | W/L=1/0 | pnl=+4.44
+2025-08 | ETH/USDT:USDT | trades=1 | W/L=0/1 | pnl=-4.44
+2025-08 | BTC/USDT:USDT | trades=1 | W/L=0/1 | pnl=-4.19
+2025-08 | SOL/USDT:USDT | trades=1 | W/L=0/1 | pnl=-3.97
+2025-08 | DOGE/USDT:USDT | trades=1 | W/L=0/1 | pnl=-3.74
+2025-09 | BTC/USDT:USDT | trades=1 | W/L=0/1 | pnl=-4.40
+2025-09 | SOL/USDT:USDT | trades=1 | W/L=0/1 | pnl=-3.77
+2025-09 | ETH/USDT:USDT | trades=1 | W/L=1/0 | pnl=+2.09
+2025-09 | DOGE/USDT:USDT | trades=1 | W/L=1/0 | pnl=+3.35
+2026-01 | XRP/USDT:USDT | trades=1 | W/L=0/1 | pnl=-24.57
+2026-01 | ETH/USDT:USDT | trades=1 | W/L=0/1 | pnl=-14.69
+2026-01 | DOGE/USDT:USDT | trades=1 | W/L=0/1 | pnl=-6.19
+2026-03 | SOL/USDT:USDT | trades=1 | W/L=0/1 | pnl=-6.44
+2026-03 | ETH/USDT:USDT | trades=1 | W/L=0/1 | pnl=-5.62
+2026-03 | DOGE/USDT:USDT | trades=1 | W/L=0/1 | pnl=-2.84
+2026-03 | BTC/USDT:USDT | trades=1 | W/L=1/0 | pnl=+3.29
+2026-03 | XRP/USDT:USDT | trades=1 | W/L=1/0 | pnl=+5.02
+2026-04 | SOL/USDT:USDT | trades=1 | W/L=0/1 | pnl=-7.93
+2026-04 | ETH/USDT:USDT | trades=1 | W/L=0/1 | pnl=-5.91
+2026-04 | DOGE/USDT:USDT | trades=1 | W/L=0/1 | pnl=-4.61
+2026-04 | XRP/USDT:USDT | trades=1 | W/L=1/0 | pnl=+4.54
