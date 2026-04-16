@@ -172,6 +172,10 @@ class SignalEngine:
         if len(df) >= slow:
             df.ta.ema(length=slow, append=True)
 
+        adx_length = int(self.get_param('ADVANCED_TREND_ADX_LENGTH'))
+        if len(df) >= adx_length:
+            df.ta.adx(length=adx_length, append=True)
+
         return df
 
     def get_market_regime(self, df_daily: pd.DataFrame) -> str:
@@ -222,6 +226,87 @@ class SignalEngine:
             return 'bear'
         return 'neutral'
 
+    def get_hourly_adx(self, df_hourly: pd.DataFrame) -> float:
+        if df_hourly.empty:
+            return None
+        adx_prefix = f"ADX_{int(self.get_param('ADVANCED_TREND_ADX_LENGTH'))}"
+        adx_cols = [c for c in df_hourly.columns if c.startswith(adx_prefix)]
+        if not adx_cols:
+            return None
+        adx_val = df_hourly.iloc[-1][adx_cols[0]]
+        if pd.isna(adx_val):
+            return None
+        return adx_val
+
+    def get_hourly_fast_ema(self, df_hourly: pd.DataFrame):
+        fast_col = [c for c in df_hourly.columns if c == f"EMA_{self.get_param('HOURLY_EMA_FAST')}"]
+        if not fast_col or df_hourly.empty:
+            return None
+        val = df_hourly.iloc[-1][fast_col[0]]
+        if pd.isna(val):
+            return None
+        return val
+
+    def has_hhhl_structure(self, df_hourly: pd.DataFrame, direction: str) -> bool:
+        lookback = int(self.get_param('ADVANCED_TREND_STRUCTURE_BARS'))
+        recent = df_hourly[['high', 'low']].dropna().tail(lookback)
+        if len(recent) < lookback:
+            return False
+
+        highs = recent['high'].tolist()
+        lows = recent['low'].tolist()
+        if direction == 'long':
+            return all(highs[i] > highs[i - 1] for i in range(1, len(highs))) and all(
+                lows[i] > lows[i - 1] for i in range(1, len(lows))
+            )
+        return all(highs[i] < highs[i - 1] for i in range(1, len(highs))) and all(
+            lows[i] < lows[i - 1] for i in range(1, len(lows))
+        )
+
+    def passes_advanced_trend_filter(self, df_hourly: pd.DataFrame, direction: str) -> bool:
+        """
+        Stronger trend validation using hourly ADX, EMA slope, and price structure.
+        """
+        if not self.get_param('ENABLE_ADVANCED_TREND_FILTER'):
+            return True
+        if df_hourly.empty:
+            return False
+
+        hourly_trend = self.get_hourly_trend(df_hourly)
+        if direction == 'long' and hourly_trend != 'bull':
+            return False
+        if direction == 'short' and hourly_trend != 'bear':
+            return False
+
+        adx_val = self.get_hourly_adx(df_hourly)
+        if adx_val is None or adx_val < self.get_param('ADVANCED_TREND_ADX_THRESHOLD'):
+            return False
+
+        lookback = int(self.get_param('ADVANCED_TREND_SLOPE_LOOKBACK'))
+        fast_col = [c for c in df_hourly.columns if c == f"EMA_{self.get_param('HOURLY_EMA_FAST')}"]
+        if not fast_col or len(df_hourly) <= lookback:
+            return False
+
+        fast_series = df_hourly[fast_col[0]].dropna()
+        if len(fast_series) <= lookback:
+            return False
+        latest_fast = fast_series.iloc[-1]
+        previous_fast = fast_series.iloc[-(lookback + 1)]
+        if pd.isna(latest_fast) or pd.isna(previous_fast) or previous_fast == 0:
+            return False
+
+        slope_ratio = (latest_fast - previous_fast) / previous_fast
+        slope_min = self.get_param('ADVANCED_TREND_SLOPE_MIN')
+        if direction == 'long' and slope_ratio < slope_min:
+            return False
+        if direction == 'short' and slope_ratio > -slope_min:
+            return False
+
+        if not self.has_hhhl_structure(df_hourly, direction):
+            return False
+
+        return True
+
     def check_donchian_long_signal(self, symbol: str, df: pd.DataFrame, df_hourly: pd.DataFrame = None) -> bool:
         """
         Returns True when a long Donchian breakout entry is valid.
@@ -256,8 +341,11 @@ class SignalEngine:
         hourly_filter = True
         if self.get_param('ENABLE_1H_TREND_FILTER'):
             hourly_filter = self.get_hourly_trend(df_hourly if df_hourly is not None else pd.DataFrame()) == 'bull'
+        advanced_filter = self.passes_advanced_trend_filter(
+            df_hourly if df_hourly is not None else pd.DataFrame(), 'long'
+        )
 
-        if not (breakout_signal and rsi_signal and vol_filter and hourly_filter):
+        if not (breakout_signal and rsi_signal and vol_filter and hourly_filter and advanced_filter):
             return False
 
         predicted_close = self.get_ai_prediction(symbol, df)
@@ -300,8 +388,11 @@ class SignalEngine:
         hourly_filter = True
         if self.get_param('ENABLE_1H_TREND_FILTER'):
             hourly_filter = self.get_hourly_trend(df_hourly if df_hourly is not None else pd.DataFrame()) == 'bear'
+        advanced_filter = self.passes_advanced_trend_filter(
+            df_hourly if df_hourly is not None else pd.DataFrame(), 'short'
+        )
 
-        if not (breakout_signal and rsi_signal and vol_filter and hourly_filter):
+        if not (breakout_signal and rsi_signal and vol_filter and hourly_filter and advanced_filter):
             return False
 
         predicted_close = self.get_ai_prediction(symbol, df)
@@ -372,6 +463,8 @@ class SignalEngine:
         if direction == 'long':
             if hourly_trend != 'bull':
                 return False
+            if not self.passes_advanced_trend_filter(df_hourly if df_hourly is not None else pd.DataFrame(), 'long'):
+                return False
             if current_price < last_add_price * (1 + self.get_param('TREND_PYRAMID_MIN_PULLBACK')):
                 return False
             if not pd.isna(donchian_mid) and close_val < donchian_mid:
@@ -379,6 +472,8 @@ class SignalEngine:
             return True
 
         if hourly_trend != 'bear':
+            return False
+        if not self.passes_advanced_trend_filter(df_hourly if df_hourly is not None else pd.DataFrame(), 'short'):
             return False
         if current_price > last_add_price * (1 - self.get_param('TREND_PYRAMID_MIN_PULLBACK')):
             return False
