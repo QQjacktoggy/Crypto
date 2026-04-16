@@ -1,0 +1,55 @@
+Phase 5 Breakout Optimization Report
+Generated: 2026-04-16 10:28:33
+Goal: yearly profit >= 400 USDT on 150.0 USDT capital
+========================================================================
+
+Iteration #1
+  PnL=+41.21 | Final=191.58 | WR=70.8% | DD=65.2% | Trades=72 | AvgM=+3.17 | BestM=+44.52
+  Breakout=False Buf=0.0000 Vol=0.00 LongRSI=0-0 ShortRSI=0-0
+  Lev=7x Margin=0.090 Mode=classic BBbuf=0.006 VolFilter=0.45
+
+Iteration #2
+  PnL=-28.78 | Final=121.46 | WR=53.1% | DD=64.7% | Trades=49 | AvgM=-2.21 | BestM=+24.86
+  Breakout=True Buf=0.0015 Vol=1.00 LongRSI=50-82 ShortRSI=18-50
+  Lev=7x Margin=0.090 Mode=classic BBbuf=0.006 VolFilter=0.45
+
+Iteration #3
+  PnL=-24.19 | Final=126.02 | WR=55.4% | DD=63.2% | Trades=56 | AvgM=-1.86 | BestM=+31.50
+  Breakout=True Buf=0.0025 Vol=1.10 LongRSI=52-78 ShortRSI=22-48
+  Lev=7x Margin=0.090 Mode=classic BBbuf=0.006 VolFilter=0.45
+
+Iteration #4
+  PnL=-3.09 | Final=147.22 | WR=61.8% | DD=65.2% | Trades=68 | AvgM=-0.24 | BestM=+37.98
+  Breakout=True Buf=0.0040 Vol=1.20 LongRSI=55-80 ShortRSI=20-45
+  Lev=7x Margin=0.090 Mode=classic BBbuf=0.006 VolFilter=0.45
+
+Iteration #5
+  PnL=-36.83 | Final=113.52 | WR=58.0% | DD=70.8% | Trades=50 | AvgM=-2.83 | BestM=+13.07
+  Breakout=True Buf=0.0020 Vol=1.05 LongRSI=50-76 ShortRSI=24-48
+  Lev=5x Margin=0.085 Mode=classic BBbuf=0.008 VolFilter=0.42
+
+Iteration #6
+  PnL=-42.53 | Final=107.71 | WR=50.9% | DD=68.2% | Trades=53 | AvgM=-3.27 | BestM=+26.61
+  Breakout=True Buf=0.0020 Vol=1.05 LongRSI=50-80 ShortRSI=20-50
+  Lev=7x Margin=0.085 Mode=multi BBbuf=0.006 VolFilter=0.45
+
+Iteration #7
+  PnL=-40.01 | Final=110.17 | WR=52.8% | DD=66.3% | Trades=53 | AvgM=-3.08 | BestM=+22.86
+  Breakout=True Buf=0.0025 Vol=1.15 LongRSI=54-82 ShortRSI=18-46
+  Lev=7x Margin=0.090 Mode=classic BBbuf=0.006 VolFilter=0.45
+
+Iteration #8
+  PnL=-39.89 | Final=110.35 | WR=50.0% | DD=66.0% | Trades=50 | AvgM=-3.07 | BestM=+24.74
+  Breakout=True Buf=0.0030 Vol=1.25 LongRSI=55-82 ShortRSI=18-45
+  Lev=7x Margin=0.095 Mode=classic BBbuf=0.006 VolFilter=0.42
+
+Iteration #9
+  PnL=-18.97 | Final=131.27 | WR=53.1% | DD=62.7% | Trades=49 | AvgM=-1.46 | BestM=+16.57
+  Breakout=True Buf=0.0010 Vol=0.95 LongRSI=48-74 ShortRSI=24-50
+  Lev=5x Margin=0.075 Mode=classic BBbuf=0.008 VolFilter=0.40
+
+Iteration #10
+  PnL=-27.31 | Final=122.90 | WR=55.2% | DD=63.4% | Trades=67 | AvgM=-2.10 | BestM=+33.20
+  Breakout=True Buf=0.0035 Vol=1.30 LongRSI=56-84 ShortRSI=16-44
+  Lev=7x Margin=0.090 Mode=classic BBbuf=0.006 VolFilter=0.45
+

@@ -20,6 +20,8 @@
 8. [最新結論與 400U 目標檢查](#8-最新結論與-400u-目標檢查)
 9. [Phase 4: 結構升級 — 波動分級進場 + 動能式 DCA](#9-phase-4-結構升級--波動分級進場--動能式-dca)
 10. [最終最新結論](#10-最終最新結論)
+11. [Phase 5: Regime Breakout / Trend Following](#11-phase-5-regime-breakout--trend-following)
+12. [最新最終結論（Phase 5 後）](#12-最新最終結論phase-5-後)
 
 ---
 
@@ -478,5 +480,93 @@ SL_GLOBAL_CAP_PCT = -0.12
 ### 最後一句話
 
 > 我已經幫你把「參數優化」和「第一層結構優化」都跑完了。  
-> 結果顯示：**目前這個策略框架可以做到小幅穩定正收益，但還撐不起 +400U/年。**  
-> 如果你要，我下一步可以直接替你做 **Phase 5：Breakout / Trend Following 新策略 10 次迭代**。
+> 結果顯示：**目前這個策略框架可以做到小幅穩定正收益，但還撐不起 +400U/年。**
+
+---
+
+## 11. Phase 5: Regime Breakout / Trend Following
+
+### 本輪新增邏輯
+
+這一輪直接把策略做成 **regime-specific**：
+
+1. **bull 市場**
+   - 允許 breakout long
+   - 條件：站上布林上軌 + buffer、EMA 多頭、MACD histogram > 0、量能放大
+
+2. **bear 市場**
+   - 允許 breakout short
+   - 條件：跌破布林下軌 + buffer、EMA 空頭、MACD histogram < 0、量能放大
+
+3. **neutral 市場**
+   - 仍維持原本的 RSI + BB 均值回歸
+
+### Round 5 結果排名
+
+| 排名 | Iter | PnL | 最終資金 | 勝率 | 最大回撤 | 交易數 | 核心設定 |
+|:----:|:----:|----:|---------:|-----:|--------:|------:|----------|
+| 🥇1 | 1 | **+41.21** | **191.58** | 70.8% | 65.2% | 72 | 控制組：不開 breakout |
+| 🥈2 | 4 | **-3.09** | 147.22 | 61.8% | 65.2% | 68 | breakout 開 / buffer 0.004 / breakout volume 1.20 |
+| 3 | 9 | -18.97 | 131.27 | 53.1% | 62.7% | 49 | breakout 開 / 5x / buffer 0.001 / volume 0.95 |
+| 4 | 3 | -24.19 | 126.02 | 55.4% | 63.2% | 56 | breakout 開 / buffer 0.0025 / volume 1.10 |
+| 5 | 10 | -27.31 | 122.90 | 55.2% | 63.4% | 67 | breakout 開 / buffer 0.0035 / volume 1.30 |
+| 6 | 2 | -28.78 | 121.46 | 53.1% | 64.7% | 49 | breakout 開 / buffer 0.0015 / volume 1.00 |
+| 7 | 5 | -36.83 | 113.52 | 58.0% | 70.8% | 50 | breakout 開 / 5x / volume 1.05 |
+| 8 | 8 | -39.89 | 110.35 | 50.0% | 66.0% | 50 | breakout 開 / 高倉位 / volume 1.25 |
+| 9 | 7 | -40.01 | 110.17 | 52.8% | 66.3% | 53 | breakout 開 / 搭配 VolAdapt |
+| 10 | 6 | -42.53 | 107.71 | 50.9% | 68.2% | 53 | breakout 開 / multi 模式 |
+
+### 本輪結論
+
+1. **這版 breakout / trend-following 沒有優於原本 best setup**
+   - 最佳 breakout 組合仍是虧損 **-3.09 USDT**
+   - 控制組依然維持第一名 **+41.21 USDT**
+
+2. **市場確實有 breakout 機會，但目前條件組合期望值不夠高**
+   - 勝率普遍降到 50-62%
+   - 顯示 breakout signal 在這份資料上更容易追到假突破
+
+3. **較大的 breakout buffer（0.004）反而最好**
+   - 說明太早追 breakout 容易被雜訊洗掉
+   - 必須等待更明確的突破才有機會接近損平
+
+4. **目前最合理的判斷**
+   - breakout 不是完全沒價值
+   - 但「只靠 BB breakout + EMA + MACD + volume」還不足以成為主策略
+
+---
+
+## 12. 最新最終結論（Phase 5 後）
+
+### 到目前為止的最佳結果仍然不變
+
+- **最佳年度獲利：+41.21 USDT**
+- 來自 **Phase 3 / Iteration 7**
+- **400U/年目標依然未達成**
+
+### 現在已經可以明確排除的方向
+
+1. **單純固定 TP/SL 微調** → 不行  
+2. **只做 ATR 動態 TP/SL** → 有幫助，但提升有限  
+3. **波動分級 + 動能 DCA** → 更穩，但獲利被壓縮  
+4. **這一版 regime breakout** → 有交易邏輯價值，但仍打不過最佳均值回歸配置
+
+### 下一步真正值得做的方向
+
+如果要再往上走，我建議後面不要再做小修，而是改做下面其中一條：
+
+1. **Donchian / 通道突破**
+   - 比 BB breakout 更適合趨勢跟隨
+2. **多時間框架 regime**
+   - 1D 判斷市場狀態，1H 確認趨勢，5m 只做精準執行
+3. **市場狀態切換不同出場機制**
+   - breakout 走 trailing / trend exit
+   - mean reversion 走 ATR TP/SL
+4. **降低 DCA，改做 trend pyramiding**
+   - 趨勢單不應該用傳統逆勢攤平邏輯
+
+### 最後一句話
+
+> 我已經把 **Phase 5 breakout / trend-following** 也做完並回測了。  
+> 結果證明：**目前最佳解仍然是 Phase 3 的 +41.21 USDT/year。**  
+> 下一輪如果要再做，我建議不要再沿用 BB breakout，而是直接進 **Phase 6：Donchian / 多時間框架 / 趨勢加碼**。
