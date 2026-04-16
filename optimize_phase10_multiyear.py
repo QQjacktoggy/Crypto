@@ -200,6 +200,7 @@ SCENARIOS = [
 
 def run_scenario(iteration_num, scenario):
     try:
+        window_days = scenario['days']
         full_params = {
             'EMA_FAST': config.EMA_FAST,
             'EMA_SLOW': config.EMA_SLOW,
@@ -246,9 +247,9 @@ def run_scenario(iteration_num, scenario):
         }
         full_params.update(scenario['params'])
 
-        engine = BacktestEngine(days=scenario['days'], param_overrides=full_params)
+        engine = BacktestEngine(days=window_days, param_overrides=full_params)
         if not engine.run():
-            raise RuntimeError(f"No historical data available for {scenario['days']}d window")
+            raise RuntimeError(f"No historical data available for {window_days}d window")
 
         closed_trades = [t for t in engine.trades if t['type'] == 'close']
         total_pnl = sum(t['pnl'] for t in closed_trades)
@@ -257,7 +258,7 @@ def run_scenario(iteration_num, scenario):
         return {
             'iteration': iteration_num,
             'label': scenario['label'],
-            'days': scenario['days'],
+            'days': window_days,
             'params': scenario['params'],
             'final_balance': engine.current_balance,
             'total_pnl': total_pnl,

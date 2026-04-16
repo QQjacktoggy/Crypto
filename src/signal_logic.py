@@ -255,13 +255,15 @@ class SignalEngine:
 
         highs = recent['high'].tolist()
         lows = recent['low'].tolist()
+        required_steps = max(1, len(highs) - 2)
         if direction == 'long':
-            return all(highs[i] > highs[i - 1] for i in range(1, len(highs))) and all(
-                lows[i] > lows[i - 1] for i in range(1, len(lows))
-            )
-        return all(highs[i] < highs[i - 1] for i in range(1, len(highs))) and all(
-            lows[i] < lows[i - 1] for i in range(1, len(lows))
-        )
+            rising_highs = sum(1 for i in range(1, len(highs)) if highs[i] > highs[i - 1])
+            rising_lows = sum(1 for i in range(1, len(lows)) if lows[i] > lows[i - 1])
+            return highs[-1] > highs[0] and lows[-1] > lows[0] and rising_highs >= required_steps and rising_lows >= required_steps
+
+        falling_highs = sum(1 for i in range(1, len(highs)) if highs[i] < highs[i - 1])
+        falling_lows = sum(1 for i in range(1, len(lows)) if lows[i] < lows[i - 1])
+        return highs[-1] < highs[0] and lows[-1] < lows[0] and falling_highs >= required_steps and falling_lows >= required_steps
 
     def passes_advanced_trend_filter(self, df_hourly: pd.DataFrame, direction: str) -> bool:
         """
@@ -292,7 +294,7 @@ class SignalEngine:
             return False
         latest_fast = fast_series.iloc[-1]
         previous_fast = fast_series.iloc[-(lookback + 1)]
-        if pd.isna(latest_fast) or pd.isna(previous_fast) or previous_fast == 0:
+        if pd.isna(latest_fast) or pd.isna(previous_fast) or abs(previous_fast) < 1e-10:
             return False
 
         slope_ratio = (latest_fast - previous_fast) / previous_fast
