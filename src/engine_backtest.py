@@ -22,6 +22,7 @@ class BacktestEngine:
         self.params = {}
         param_keys = [
             'RSI_LONG_ENTRY', 'RSI_SHORT_ENTRY', 'TP_MARGIN_ROI', 'SL_MARGIN_ROI',
+            'TP_NET_PROFIT', 'SL_MAX_LOSS',
             'SL_GLOBAL_CAP_PCT', 'TIER_MARGIN_PCT', 'LEVERAGE', 'MAX_ACTIVE_TRADES',
             'TIER_2_DEV_PCT', 'TIER_3_DEV_PCT', 'TRAILING_TP_ACTIVATE_ROI',
             'TRAILING_TP_CALLBACK_ROI', 'FUNDING_RATE', 'COOLDOWN_CANDLES',
@@ -444,8 +445,8 @@ class BacktestEngine:
                     global_cap_sl = self.current_balance * sl_cap
                     target_sl = max(margin_sl, global_cap_sl)
                 else:
-                    target_tp = config.TP_NET_PROFIT
-                    target_sl = config.SL_MAX_LOSS
+                    target_tp = self.params['TP_NET_PROFIT']
+                    target_sl = self.params['SL_MAX_LOSS']
 
                 # Check Stop Loss
                 sl_pnl = self.calculate_pnl(symbol, worst_price)

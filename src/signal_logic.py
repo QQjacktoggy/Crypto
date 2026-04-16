@@ -601,7 +601,7 @@ class SignalEngine:
         if signal_mode is None:
             signal_mode = self.get_param('SIGNAL_MODE')
 
-        if df.empty or len(df) < 30:
+        if df.empty or len(df) < self.get_min_signal_candles():
             return False
 
         latest = df.iloc[-1]
