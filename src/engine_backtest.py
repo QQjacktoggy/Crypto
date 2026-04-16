@@ -28,6 +28,9 @@ class BacktestEngine:
             'TRAILING_TP_CALLBACK_ROI', 'FUNDING_RATE', 'COOLDOWN_CANDLES',
             'EMA_FAST', 'EMA_SLOW', 'FEE_RATE', 'COMPOUND_MODE', 'BASE_CAPITAL',
             'SIGNAL_MODE',
+            # Dynamic ATR-based TP/SL parameters
+            'DYNAMIC_TPSL', 'ATR_TP_MULT', 'ATR_SL_MULT',
+            'ATR_TP_MIN_ROI', 'ATR_TP_MAX_ROI', 'ATR_SL_MIN_ROI', 'ATR_SL_MAX_ROI',
         ]
         for key in param_keys:
             if param_overrides and key in param_overrides:
@@ -103,7 +106,7 @@ class BacktestEngine:
             return 0.0
         return pos['notional_usdt'] / pos['amount']
 
-    def execute_order(self, symbol, margin_usdt, price, timestamp, tier, direction):
+    def execute_order(self, symbol, margin_usdt, price, timestamp, tier, direction, atr_value=None):
         leverage = self.params['LEVERAGE']
         fee_rate = self.params['FEE_RATE']
 
@@ -119,7 +122,7 @@ class BacktestEngine:
             self.positions[symbol] = {
                 'tier': 0, 'direction': direction, 'amount': 0.0,
                 'margin_usdt': 0.0, 'notional_usdt': 0.0, 'fees_usdt': 0.0,
-                'open_time': timestamp
+                'open_time': timestamp, 'entry_atr': atr_value
             }
 
         pos = self.positions[symbol]
@@ -356,8 +359,30 @@ class BacktestEngine:
                     best_price = row['low']
 
                 if self.params['COMPOUND_MODE']:
-                    target_tp = pos['margin_usdt'] * tp_roi
-                    margin_sl = pos['margin_usdt'] * sl_roi
+                    # Dynamic ATR-based TP/SL
+                    if self.params.get('DYNAMIC_TPSL', False) and pos.get('entry_atr') and pos['entry_atr'] > 0:
+                        avg_price = self.get_avg_price(symbol)
+                        if avg_price > 0:
+                            atr = pos['entry_atr']
+                            leverage_val = self.params['LEVERAGE']
+                            # ATR-based TP/SL as ROI on margin
+                            # price_move = ATR * multiplier
+                            # ROI = (price_move / avg_price) * leverage
+                            tp_roi_raw = (atr * self.params.get('ATR_TP_MULT', 2.0) / avg_price) * leverage_val
+                            sl_roi_raw = -((atr * self.params.get('ATR_SL_MULT', 1.5) / avg_price) * leverage_val)
+                            # Clamp to min/max bounds
+                            tp_roi_clamped = max(self.params.get('ATR_TP_MIN_ROI', 0.08),
+                                                 min(tp_roi_raw, self.params.get('ATR_TP_MAX_ROI', 0.40)))
+                            sl_roi_clamped = min(self.params.get('ATR_SL_MIN_ROI', -0.15),
+                                                 max(sl_roi_raw, self.params.get('ATR_SL_MAX_ROI', -0.70)))
+                            target_tp = pos['margin_usdt'] * tp_roi_clamped
+                            margin_sl = pos['margin_usdt'] * sl_roi_clamped
+                        else:
+                            target_tp = pos['margin_usdt'] * tp_roi
+                            margin_sl = pos['margin_usdt'] * sl_roi
+                    else:
+                        target_tp = pos['margin_usdt'] * tp_roi
+                        margin_sl = pos['margin_usdt'] * sl_roi
                     global_cap_sl = self.current_balance * sl_cap
                     target_sl = max(margin_sl, global_cap_sl)
                 else:
@@ -404,18 +429,26 @@ class BacktestEngine:
                     df_slice = indicators[symbol].loc[:timestamp]
                     margin_to_use = get_dynamic_margin()
 
+                    # Get current ATR for DCA tiers
+                    atr_val = None
+                    atr_cols = [c for c in indicators[symbol].columns if c.startswith('ATRr_')]
+                    if atr_cols:
+                        atr_val = row[atr_cols[0]] if atr_cols[0] in row.index else None
+                        if atr_val is not None and pd.isna(atr_val):
+                            atr_val = None
+
                     if pos['tier'] == 1:
                         if self.signal_engine.check_tier_2_signal(
                             current_price, avg_price, self.params['TIER_2_DEV_PCT'], direction, df_slice
                         ):
                             exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
-                            self.execute_order(symbol, margin_to_use, exec_price, timestamp, 2, direction)
+                            self.execute_order(symbol, margin_to_use, exec_price, timestamp, 2, direction, atr_value=atr_val)
                     elif pos['tier'] == 2:
                         if self.signal_engine.check_tier_3_signal(
                             current_price, avg_price, self.params['TIER_3_DEV_PCT'], direction
                         ):
                             exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
-                            self.execute_order(symbol, margin_to_use, exec_price, timestamp, 3, direction)
+                            self.execute_order(symbol, margin_to_use, exec_price, timestamp, 3, direction, atr_value=atr_val)
 
             # 3. Scanning Phase (skip if monthly circuit breaker active)
             signal_mode = self.params.get('SIGNAL_MODE', 'classic')
@@ -443,15 +476,23 @@ class BacktestEngine:
                     df_slice = indicators[symbol].loc[:timestamp]
                     current_price = indicators[symbol].loc[timestamp]['close']
 
+                    # Extract ATR value for dynamic TP/SL
+                    atr_val = None
+                    atr_cols = [c for c in indicators[symbol].columns if c.startswith('ATRr_')]
+                    if atr_cols:
+                        atr_val = indicators[symbol].loc[timestamp][atr_cols[0]]
+                        if pd.isna(atr_val):
+                            atr_val = None
+
                     can_go_long = current_regime in ['bull', 'neutral']
                     can_go_short = current_regime in ['bear', 'neutral']
 
                     if can_go_long and self.signal_engine.check_tier_1_long_signal(symbol, df_slice, signal_mode):
                         exec_price = current_price * 1.0005
-                        self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'long')
+                        self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'long', atr_value=atr_val)
                     elif can_go_short and self.signal_engine.check_tier_1_short_signal(symbol, df_slice, signal_mode):
                         exec_price = current_price * 0.9995
-                        self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'short')
+                        self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'short', atr_value=atr_val)
 
                     if len(self.positions) >= max_trades:
                         break

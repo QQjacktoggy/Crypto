@@ -86,6 +86,15 @@ class Config:
     COOLDOWN_CANDLES = 12   # Minimum candles (1 hour) before re-entry after SL
     MAX_CONSECUTIVE_LOSSES = 3  # Pause symbol after 3 consecutive losses
 
+    # --- Dynamic ATR-based TP/SL ---
+    DYNAMIC_TPSL = False         # Use ATR-based dynamic TP/SL instead of fixed ROI
+    ATR_TP_MULT = 2.0            # TP = ATR * multiplier (as price distance)
+    ATR_SL_MULT = 1.5            # SL = ATR * multiplier (as price distance)
+    ATR_TP_MIN_ROI = 0.08        # Minimum TP ROI floor (8%)
+    ATR_TP_MAX_ROI = 0.40        # Maximum TP ROI cap (40%)
+    ATR_SL_MIN_ROI = -0.15       # Minimum SL ROI floor (-15%)
+    ATR_SL_MAX_ROI = -0.70       # Maximum SL ROI cap (-70%)
+
     # Timeframes
     TIMEFRAME = '5m'
 
