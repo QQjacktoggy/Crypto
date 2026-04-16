@@ -36,6 +36,13 @@ class BacktestEngine:
             'ENABLE_REGIME_BREAKOUT', 'BREAKOUT_BUFFER_PCT', 'BREAKOUT_VOLUME_MULT',
             'BREAKOUT_LONG_RSI_MIN', 'BREAKOUT_LONG_RSI_MAX',
             'BREAKOUT_SHORT_RSI_MIN', 'BREAKOUT_SHORT_RSI_MAX',
+            'ENABLE_DONCHIAN_BREAKOUT', 'DONCHIAN_LENGTH', 'DONCHIAN_BREAKOUT_BUFFER_PCT',
+            'DONCHIAN_VOLUME_MULT', 'DONCHIAN_LONG_RSI_MIN', 'DONCHIAN_LONG_RSI_MAX',
+            'DONCHIAN_SHORT_RSI_MIN', 'DONCHIAN_SHORT_RSI_MAX',
+            'ENABLE_1H_TREND_FILTER', 'HOURLY_EMA_FAST', 'HOURLY_EMA_SLOW',
+            'ENABLE_TREND_PYRAMIDING', 'TREND_PYRAMID_MAX_ADDS',
+            'TREND_PYRAMID_TRIGGER_ROI', 'TREND_PYRAMID_MIN_PULLBACK',
+            'ENABLE_TREND_EXIT', 'TREND_EXIT_ON_HOURLY_FLIP', 'TREND_EXIT_USE_DONCHIAN_MID',
             'MAX_CONSECUTIVE_LOSSES', 'CONSECUTIVE_LOSS_COOLDOWN_MULT',
             'ENABLE_MONTHLY_CIRCUIT_BREAKER',
             'MONTHLY_LOSS_LIMIT_PCT', 'FUNDING_INTERVAL_HOURS',
@@ -125,7 +132,7 @@ class BacktestEngine:
             return 0.0
         return pos['notional_usdt'] / pos['amount']
 
-    def execute_order(self, symbol, margin_usdt, price, timestamp, tier, direction, atr_value=None):
+    def execute_order(self, symbol, margin_usdt, price, timestamp, tier, direction, atr_value=None, entry_style=None):
         leverage = self.params['LEVERAGE']
         fee_rate = self.params['FEE_RATE']
 
@@ -146,7 +153,9 @@ class BacktestEngine:
             self.positions[symbol] = {
                 'tier': 0, 'direction': direction, 'amount': 0.0,
                 'margin_usdt': 0.0, 'notional_usdt': 0.0, 'fees_usdt': 0.0,
-                'open_time': timestamp, 'entry_atr': atr_value
+                'open_time': timestamp, 'entry_atr': atr_value,
+                'entry_style': entry_style or 'mean_reversion',
+                'last_entry_price': price,
             }
 
         pos = self.positions[symbol]
@@ -155,6 +164,9 @@ class BacktestEngine:
         pos['margin_usdt'] += margin_usdt
         pos['notional_usdt'] += position_value_usdt
         pos['fees_usdt'] += fee
+        pos['last_entry_price'] = price
+        if pos.get('entry_style') is None:
+            pos['entry_style'] = entry_style or 'mean_reversion'
 
         current_margin = sum(p['margin_usdt'] for p in self.positions.values())
         if current_margin > self.max_margin_usage:
@@ -260,16 +272,36 @@ class BacktestEngine:
     def run(self):
         logger.info("Loading data and calculating indicators for all symbols...")
         indicators = {}
+        indicators_hourly = {}
         min_len = float('inf')
 
         for symbol in self.symbols:
-            df = self.fetch_historical_data(symbol)
-            if not df.empty:
-                df = self.signal_engine.calculate_indicators(df)
+            raw_df = self.fetch_historical_data(symbol)
+            if not raw_df.empty:
+                df = self.signal_engine.calculate_indicators(raw_df.copy())
                 df.set_index('timestamp', inplace=True)
                 indicators[symbol] = df
                 if len(df) < min_len:
                     min_len = len(df)
+
+                df_hourly = (
+                    raw_df.copy()
+                    .set_index('timestamp')
+                    .resample('1h')
+                    .agg({
+                        'open': 'first',
+                        'high': 'max',
+                        'low': 'min',
+                        'close': 'last',
+                        'volume': 'sum',
+                    })
+                    .dropna()
+                    .reset_index()
+                )
+                if not df_hourly.empty:
+                    df_hourly = self.signal_engine.calculate_hourly_indicators(df_hourly)
+                    df_hourly.set_index('timestamp', inplace=True)
+                    indicators_hourly[symbol] = df_hourly.shift(1)
 
         if not indicators:
             logger.error("No data available to backtest.")
@@ -375,6 +407,7 @@ class BacktestEngine:
                 current_price = row['close']
                 pos = self.positions[symbol]
                 direction = pos['direction']
+                df_hourly_slice = indicators_hourly.get(symbol, pd.DataFrame()).loc[:timestamp] if symbol in indicators_hourly else pd.DataFrame()
 
                 if direction == 'long':
                     worst_price = row['low']
@@ -421,6 +454,14 @@ class BacktestEngine:
                     self.close_position(symbol, exec_price, timestamp, is_tp=False)
                     continue
 
+                df_slice = indicators[symbol].loc[:timestamp]
+                if pos.get('entry_style') == 'donchian' and self.signal_engine.should_exit_trend_position(
+                    df_slice, df_hourly_slice, direction
+                ):
+                    exec_price = current_price * (0.9995 if direction == 'long' else 1.0005)
+                    self.close_position(symbol, exec_price, timestamp, is_tp=True, reason_detail='TREND_EXIT')
+                    continue
+
                 # Check trailing take-profit
                 best_pnl = self.calculate_pnl(symbol, best_price)
                 best_roi = best_pnl / pos['margin_usdt'] if pos['margin_usdt'] > 0 else 0
@@ -451,7 +492,6 @@ class BacktestEngine:
                 pos = self.positions.get(symbol)
                 if pos:
                     avg_price = self.get_avg_price(symbol)
-                    df_slice = indicators[symbol].loc[:timestamp]
                     margin_to_use = get_dynamic_margin()
 
                     # Get current ATR for DCA tiers
@@ -462,7 +502,30 @@ class BacktestEngine:
                         if atr_val is not None and pd.isna(atr_val):
                             atr_val = None
 
-                    if pos['tier'] == 1:
+                    if pos.get('entry_style') == 'donchian' and self.params.get('ENABLE_TREND_PYRAMIDING'):
+                        max_tier = 1 + int(self.params.get('TREND_PYRAMID_MAX_ADDS', 0))
+                        current_pnl = self.calculate_pnl(symbol, current_price)
+                        current_roi = current_pnl / pos['margin_usdt'] if pos['margin_usdt'] > 0 else 0
+                        if pos['tier'] < max_tier and self.signal_engine.check_trend_pyramid_signal(
+                            current_price=current_price,
+                            last_add_price=pos.get('last_entry_price'),
+                            direction=direction,
+                            df=df_slice,
+                            df_hourly=df_hourly_slice,
+                            current_roi=current_roi,
+                        ):
+                            exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
+                            self.execute_order(
+                                symbol,
+                                margin_to_use,
+                                exec_price,
+                                timestamp,
+                                pos['tier'] + 1,
+                                direction,
+                                atr_value=atr_val,
+                                entry_style=pos.get('entry_style'),
+                            )
+                    elif pos['tier'] == 1:
                         tier_2_dev_pct = self.params['TIER_2_DEV_PCT']
                         if self.params.get('DYNAMIC_TIER_DEVIATIONS') and atr_val and current_price > 0:
                             tier_2_dev_pct = min(
@@ -518,6 +581,7 @@ class BacktestEngine:
                             continue
 
                     df_slice = indicators[symbol].loc[:timestamp]
+                    df_hourly_slice = indicators_hourly.get(symbol, pd.DataFrame()).loc[:timestamp] if symbol in indicators_hourly else pd.DataFrame()
                     current_price = indicators[symbol].loc[timestamp]['close']
 
                     # Extract ATR value for dynamic TP/SL
@@ -532,8 +596,19 @@ class BacktestEngine:
                     can_go_short = current_regime in ['bear', 'neutral']
                     long_signal = False
                     short_signal = False
+                    entry_style = 'mean_reversion'
 
-                    if self.params.get('ENABLE_REGIME_BREAKOUT', False):
+                    if self.params.get('ENABLE_DONCHIAN_BREAKOUT', False):
+                        if current_regime == 'bull' and can_go_long:
+                            if self.signal_engine.check_donchian_long_signal(symbol, df_slice, df_hourly_slice):
+                                long_signal = True
+                                entry_style = 'donchian'
+                        elif current_regime == 'bear' and can_go_short:
+                            if self.signal_engine.check_donchian_short_signal(symbol, df_slice, df_hourly_slice):
+                                short_signal = True
+                                entry_style = 'donchian'
+
+                    if not long_signal and not short_signal and self.params.get('ENABLE_REGIME_BREAKOUT', False):
                         if current_regime == 'bull' and can_go_long:
                             long_signal = (
                                 self.signal_engine.check_breakout_long_signal(symbol, df_slice) or
@@ -557,10 +632,16 @@ class BacktestEngine:
 
                     if long_signal:
                         exec_price = current_price * 1.0005
-                        self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'long', atr_value=atr_val)
+                        self.execute_order(
+                            symbol, margin_to_use, exec_price, timestamp, 1, 'long',
+                            atr_value=atr_val, entry_style=entry_style
+                        )
                     elif short_signal:
                         exec_price = current_price * 0.9995
-                        self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'short', atr_value=atr_val)
+                        self.execute_order(
+                            symbol, margin_to_use, exec_price, timestamp, 1, 'short',
+                            atr_value=atr_val, entry_style=entry_style
+                        )
 
                     if len(self.positions) >= max_trades:
                         break

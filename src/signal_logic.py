@@ -117,6 +117,12 @@ class SignalEngine:
         # Calculate volume SMA for volume filter
         df['vol_sma_20'] = df['volume'].rolling(window=20).mean()
 
+        donchian_length = int(self.get_param('DONCHIAN_LENGTH'))
+        if len(df) > donchian_length:
+            df['donchian_high'] = df['high'].rolling(window=donchian_length).max().shift(1)
+            df['donchian_low'] = df['low'].rolling(window=donchian_length).min().shift(1)
+            df['donchian_mid'] = (df['donchian_high'] + df['donchian_low']) / 2
+
         return df
 
     def calculate_daily_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -136,6 +142,22 @@ class SignalEngine:
         sma_len = self.get_param('TREND_SMA_LENGTH')
         if len(df) >= sma_len:
             df.ta.sma(length=sma_len, append=True)
+
+        return df
+
+    def calculate_hourly_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Calculates hourly trend indicators used by multi-timeframe filters.
+        """
+        if df.empty or len(df) < 5:
+            return df
+
+        fast = int(self.get_param('HOURLY_EMA_FAST'))
+        slow = int(self.get_param('HOURLY_EMA_SLOW'))
+        if len(df) >= fast:
+            df.ta.ema(length=fast, append=True)
+        if len(df) >= slow:
+            df.ta.ema(length=slow, append=True)
 
         return df
 
@@ -163,6 +185,181 @@ class SignalEngine:
                         return 'bear'
 
         return 'neutral'
+
+    def get_hourly_trend(self, df_hourly: pd.DataFrame) -> str:
+        """
+        Determines multi-timeframe trend state from hourly EMA structure.
+        """
+        if df_hourly.empty or len(df_hourly) < 1:
+            return 'neutral'
+
+        latest = df_hourly.iloc[-1]
+        fast_col = [c for c in df_hourly.columns if c == f"EMA_{self.get_param('HOURLY_EMA_FAST')}"]
+        slow_col = [c for c in df_hourly.columns if c == f"EMA_{self.get_param('HOURLY_EMA_SLOW')}"]
+        if not fast_col or not slow_col:
+            return 'neutral'
+
+        fast_val = latest[fast_col[0]]
+        slow_val = latest[slow_col[0]]
+        if pd.isna(fast_val) or pd.isna(slow_val):
+            return 'neutral'
+        if fast_val > slow_val:
+            return 'bull'
+        if fast_val < slow_val:
+            return 'bear'
+        return 'neutral'
+
+    def check_donchian_long_signal(self, symbol: str, df: pd.DataFrame, df_hourly: pd.DataFrame = None) -> bool:
+        """
+        Phase 6 long entry: Donchian breakout with optional hourly trend alignment.
+        """
+        if df.empty or len(df) < max(30, int(self.get_param('DONCHIAN_LENGTH')) + 1):
+            return False
+
+        latest = df.iloc[-1]
+        close_val = latest['close']
+        donchian_high = latest.get('donchian_high')
+        rsi_col = [c for c in df.columns if c.startswith('RSI_')]
+        if pd.isna(close_val) or pd.isna(donchian_high) or not rsi_col:
+            return False
+
+        rsi_val = latest[rsi_col[0]]
+        if pd.isna(rsi_val):
+            return False
+
+        breakout_signal = close_val >= donchian_high * (1 + self.get_param('DONCHIAN_BREAKOUT_BUFFER_PCT'))
+        rsi_signal = self.get_param('DONCHIAN_LONG_RSI_MIN') <= rsi_val <= self.get_param('DONCHIAN_LONG_RSI_MAX')
+
+        vol_filter = True
+        if 'vol_sma_20' in df.columns:
+            vol_sma = latest['vol_sma_20']
+            if not pd.isna(vol_sma) and vol_sma > 0:
+                vol_filter = latest['volume'] >= vol_sma * self.get_param('DONCHIAN_VOLUME_MULT')
+
+        hourly_filter = True
+        if self.get_param('ENABLE_1H_TREND_FILTER'):
+            hourly_filter = self.get_hourly_trend(df_hourly if df_hourly is not None else pd.DataFrame()) == 'bull'
+
+        if not (breakout_signal and rsi_signal and vol_filter and hourly_filter):
+            return False
+
+        predicted_close = self.get_ai_prediction(symbol, df)
+        if predicted_close is not None:
+            return predicted_close > close_val
+
+        return True
+
+    def check_donchian_short_signal(self, symbol: str, df: pd.DataFrame, df_hourly: pd.DataFrame = None) -> bool:
+        """
+        Phase 6 short entry: Donchian breakdown with optional hourly trend alignment.
+        """
+        if df.empty or len(df) < max(30, int(self.get_param('DONCHIAN_LENGTH')) + 1):
+            return False
+
+        latest = df.iloc[-1]
+        close_val = latest['close']
+        donchian_low = latest.get('donchian_low')
+        rsi_col = [c for c in df.columns if c.startswith('RSI_')]
+        if pd.isna(close_val) or pd.isna(donchian_low) or not rsi_col:
+            return False
+
+        rsi_val = latest[rsi_col[0]]
+        if pd.isna(rsi_val):
+            return False
+
+        breakout_signal = close_val <= donchian_low * (1 - self.get_param('DONCHIAN_BREAKOUT_BUFFER_PCT'))
+        rsi_signal = self.get_param('DONCHIAN_SHORT_RSI_MIN') <= rsi_val <= self.get_param('DONCHIAN_SHORT_RSI_MAX')
+
+        vol_filter = True
+        if 'vol_sma_20' in df.columns:
+            vol_sma = latest['vol_sma_20']
+            if not pd.isna(vol_sma) and vol_sma > 0:
+                vol_filter = latest['volume'] >= vol_sma * self.get_param('DONCHIAN_VOLUME_MULT')
+
+        hourly_filter = True
+        if self.get_param('ENABLE_1H_TREND_FILTER'):
+            hourly_filter = self.get_hourly_trend(df_hourly if df_hourly is not None else pd.DataFrame()) == 'bear'
+
+        if not (breakout_signal and rsi_signal and vol_filter and hourly_filter):
+            return False
+
+        predicted_close = self.get_ai_prediction(symbol, df)
+        if predicted_close is not None:
+            return predicted_close < close_val
+
+        return True
+
+    def should_exit_trend_position(self, df: pd.DataFrame, df_hourly: pd.DataFrame, direction: str) -> bool:
+        """
+        Phase 7 trend exit: close when higher-timeframe trend flips or price loses Donchian mid.
+        """
+        if df.empty:
+            return False
+
+        latest = df.iloc[-1]
+        hourly_trend = self.get_hourly_trend(df_hourly if df_hourly is not None else pd.DataFrame())
+
+        if self.get_param('ENABLE_TREND_EXIT') and self.get_param('TREND_EXIT_ON_HOURLY_FLIP'):
+            if direction == 'long' and hourly_trend == 'bear':
+                return True
+            if direction == 'short' and hourly_trend == 'bull':
+                return True
+
+        if self.get_param('ENABLE_TREND_EXIT') and self.get_param('TREND_EXIT_USE_DONCHIAN_MID'):
+            donchian_mid = latest.get('donchian_mid')
+            close_val = latest.get('close')
+            if not pd.isna(donchian_mid) and not pd.isna(close_val):
+                if direction == 'long' and close_val < donchian_mid:
+                    return True
+                if direction == 'short' and close_val > donchian_mid:
+                    return True
+
+        return False
+
+    def check_trend_pyramid_signal(
+        self,
+        current_price: float,
+        last_add_price: float,
+        direction: str,
+        df: pd.DataFrame,
+        df_hourly: pd.DataFrame,
+        current_roi: float,
+    ) -> bool:
+        """
+        Phase 7 trend pyramiding: add only after profitable continuation with trend intact.
+        """
+        if not self.get_param('ENABLE_TREND_PYRAMIDING'):
+            return False
+        if df.empty or last_add_price is None or last_add_price <= 0:
+            return False
+
+        trigger_roi = self.get_param('TREND_PYRAMID_TRIGGER_ROI')
+        if current_roi < trigger_roi:
+            return False
+
+        latest = df.iloc[-1]
+        donchian_mid = latest.get('donchian_mid')
+        close_val = latest.get('close')
+        if pd.isna(close_val):
+            return False
+
+        hourly_trend = self.get_hourly_trend(df_hourly if df_hourly is not None else pd.DataFrame())
+        if direction == 'long':
+            if hourly_trend != 'bull':
+                return False
+            if current_price < last_add_price * (1 + self.get_param('TREND_PYRAMID_MIN_PULLBACK')):
+                return False
+            if not pd.isna(donchian_mid) and close_val < donchian_mid:
+                return False
+            return True
+
+        if hourly_trend != 'bear':
+            return False
+        if current_price > last_add_price * (1 - self.get_param('TREND_PYRAMID_MIN_PULLBACK')):
+            return False
+        if not pd.isna(donchian_mid) and close_val > donchian_mid:
+            return False
+        return True
 
     def check_breakout_long_signal(self, symbol: str, df: pd.DataFrame) -> bool:
         """
