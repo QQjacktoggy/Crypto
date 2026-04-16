@@ -255,7 +255,8 @@ class SignalEngine:
 
         highs = recent['high'].tolist()
         lows = recent['low'].tolist()
-        required_steps = max(1, len(highs) - 2)
+        total_steps = max(1, len(highs) - 1)
+        required_steps = max(1, total_steps - 1)
         if direction == 'long':
             rising_highs = sum(1 for i in range(1, len(highs)) if highs[i] > highs[i - 1])
             rising_lows = sum(1 for i in range(1, len(lows)) if lows[i] > lows[i - 1])
