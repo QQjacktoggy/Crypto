@@ -43,17 +43,18 @@ from src.config import config
 PARAM_GRID = {
     'RSI_LONG_ENTRY': [28, 30, 32, 35],
     'RSI_SHORT_ENTRY': [65, 68, 70, 72],
-    'TP_MARGIN_ROI': [0.08, 0.10, 0.12, 0.15],
-    'SL_MARGIN_ROI': [-0.40, -0.50, -0.60, -0.80],
-    'SL_GLOBAL_CAP_PCT': [-0.04, -0.05, -0.06, -0.08],
+    'TP_MARGIN_ROI': [0.12, 0.15, 0.18, 0.20],
+    'SL_MARGIN_ROI': [-0.30, -0.40, -0.50, -0.60],
+    'SL_GLOBAL_CAP_PCT': [-0.06, -0.08, -0.10, -0.12],
     'TIER_MARGIN_PCT': [0.045, 0.050, 0.055, 0.060],
     'LEVERAGE': [5, 7, 10],
-    'TRAILING_TP_ACTIVATE_ROI': [0.04, 0.06, 0.08],
-    'TRAILING_TP_CALLBACK_ROI': [0.02, 0.03, 0.04],
+    'TRAILING_TP_ACTIVATE_ROI': [0.10, 0.12, 0.15],
+    'TRAILING_TP_CALLBACK_ROI': [0.03, 0.04, 0.05],
     'TIER_2_DEV_PCT': [0.010, 0.012, 0.015],
     'TIER_3_DEV_PCT': [0.020, 0.025, 0.030],
     'MAX_ACTIVE_TRADES': [4, 5],
     'COOLDOWN_CANDLES': [8, 12, 18],
+    'SIGNAL_MODE': ['classic', 'multi'],
 }
 
 def generate_100_param_sets():
@@ -96,7 +97,19 @@ def generate_100_param_sets():
 def run_single_iteration(iteration_num, params, days=365):
     """Run a single backtest iteration with given parameters."""
     try:
-        engine = BacktestEngine(days=days, param_overrides=params)
+        # Ensure essential defaults are present
+        full_params = {
+            'EMA_FAST': config.EMA_FAST,
+            'EMA_SLOW': config.EMA_SLOW,
+            'FUNDING_RATE': config.FUNDING_RATE,
+            'FEE_RATE': config.FEE_RATE,
+            'COMPOUND_MODE': config.COMPOUND_MODE,
+            'BASE_CAPITAL': config.BASE_CAPITAL,
+        }
+        full_params.update(params)
+
+        engine = BacktestEngine(days=days, param_overrides=full_params)
+        engine.run()
         engine.run()
 
         monthly_data = engine.get_monthly_pnl_report()

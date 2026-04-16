@@ -42,15 +42,15 @@ class Config:
     TIER_3_DEV_PCT = 0.025  # 2.5% adverse move
 
     # Take Profit & Stop Loss
-    TP_MARGIN_ROI = 0.10    # 10% return on margin (take profit faster)
-    SL_MARGIN_ROI = -0.60   # 60% margin loss (tighter stop than 100%)
+    TP_MARGIN_ROI = 0.15    # 15% return on margin
+    SL_MARGIN_ROI = -0.50   # 50% margin loss
 
     # --- Trailing Take-Profit ---
-    TRAILING_TP_ACTIVATE_ROI = 0.06  # Activate trailing TP after 6% ROI
-    TRAILING_TP_CALLBACK_ROI = 0.03  # Trail 3% behind peak
+    TRAILING_TP_ACTIVATE_ROI = 0.12  # Activate trailing TP after 12% ROI
+    TRAILING_TP_CALLBACK_ROI = 0.04  # Trail 4% behind peak
 
     # --- Absolute Safety Net ---
-    SL_GLOBAL_CAP_PCT = -0.06  # 6% of total account (tighter cap)
+    SL_GLOBAL_CAP_PCT = -0.08  # 8% of total account
 
     # Fixed absolute USDT targets [Used only if COMPOUND_MODE is False]
     TP_NET_PROFIT = 1.5
@@ -76,6 +76,11 @@ class Config:
 
     # Binance Futures Fee Rate (Maker 0.02%, Taker 0.05%. We use 0.05% for market orders)
     FEE_RATE = 0.0005
+
+    # --- Signal Strategy Mode ---
+    # 'classic': RSI + Bollinger Bands only (original, high win-rate)
+    # 'multi': RSI+BB, MACD, EMA crossover (more trades, potentially more risk)
+    SIGNAL_MODE = 'classic'
 
     # --- Cooldown Settings ---
     COOLDOWN_CANDLES = 12   # Minimum candles (1 hour) before re-entry after SL

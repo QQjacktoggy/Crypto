@@ -26,7 +26,8 @@ class BacktestEngine:
             'SL_GLOBAL_CAP_PCT', 'TIER_MARGIN_PCT', 'LEVERAGE', 'MAX_ACTIVE_TRADES',
             'TIER_2_DEV_PCT', 'TIER_3_DEV_PCT', 'TRAILING_TP_ACTIVATE_ROI',
             'TRAILING_TP_CALLBACK_ROI', 'FUNDING_RATE', 'COOLDOWN_CANDLES',
-            'EMA_FAST', 'EMA_SLOW', 'FEE_RATE', 'COMPOUND_MODE', 'BASE_CAPITAL'
+            'EMA_FAST', 'EMA_SLOW', 'FEE_RATE', 'COMPOUND_MODE', 'BASE_CAPITAL',
+            'SIGNAL_MODE',
         ]
         for key in param_keys:
             if param_overrides and key in param_overrides:
@@ -40,6 +41,10 @@ class BacktestEngine:
         self.cooldown_candle_count = {}  # Track candles since SL for each symbol
         self.consecutive_losses = {}     # Track consecutive losses per symbol
         self.trailing_peaks = {}         # Track peak PnL ROI for trailing TP
+
+        # Monthly loss circuit breaker
+        self.month_start_balance = self.params['BASE_CAPITAL']
+        self.monthly_circuit_breaker_active = False
 
         # Performance Tracking
         self.initial_balance = self.params['BASE_CAPITAL']
@@ -288,12 +293,21 @@ class BacktestEngine:
         for i in range(30, len(common_timestamps)):
             timestamp = common_timestamps.iloc[i]
 
-            # Monthly balance snapshot
+            # Monthly balance snapshot + circuit breaker
             ts_month = timestamp.to_period('M')
             if current_month is not None and ts_month != current_month:
                 # Record end-of-month balance
                 self.monthly_balances[str(current_month)] = self.current_balance
+                # Reset circuit breaker for new month
+                self.month_start_balance = self.current_balance
+                self.monthly_circuit_breaker_active = False
             current_month = ts_month
+
+            # Check monthly loss circuit breaker: if balance dropped >20% from month start, stop new trades
+            if self.month_start_balance > 0:
+                month_loss_pct = (self.current_balance - self.month_start_balance) / self.month_start_balance
+                if month_loss_pct < -0.20:
+                    self.monthly_circuit_breaker_active = True
 
             # Apply funding rate every 8 hours
             ts_hour = timestamp.hour
@@ -403,18 +417,26 @@ class BacktestEngine:
                             exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
                             self.execute_order(symbol, margin_to_use, exec_price, timestamp, 3, direction)
 
-            # 3. Scanning Phase
-            if len(self.positions) < max_trades:
+            # 3. Scanning Phase (skip if monthly circuit breaker active)
+            signal_mode = self.params.get('SIGNAL_MODE', 'classic')
+            if len(self.positions) < max_trades and not self.monthly_circuit_breaker_active:
                 margin_to_use = get_dynamic_margin()
                 for symbol in self.symbols:
                     if symbol in self.positions or symbol in self.cooldown_symbols:
                         continue
 
                     # Skip symbols with too many consecutive losses
-                    if self.consecutive_losses.get(symbol, 0) >= config.MAX_CONSECUTIVE_LOSSES:
-                        # Reset after extended cooldown
-                        if self.cooldown_candle_count.get(symbol, 0) > cooldown_min * 3:
+                    # Use a time-based reset: consecutive loss counter resets after enough candles
+                    max_consec = config.MAX_CONSECUTIVE_LOSSES
+                    if self.consecutive_losses.get(symbol, 0) >= max_consec:
+                        # Track candles since last loss for non-cooldown symbols
+                        if symbol not in self.cooldown_candle_count:
+                            self.cooldown_candle_count[symbol] = 0
+                        self.cooldown_candle_count[symbol] += 1
+                        if self.cooldown_candle_count.get(symbol, 0) > cooldown_min * 5:
                             self.consecutive_losses[symbol] = 0
+                            if symbol in self.cooldown_candle_count:
+                                del self.cooldown_candle_count[symbol]
                         else:
                             continue
 
@@ -424,10 +446,10 @@ class BacktestEngine:
                     can_go_long = current_regime in ['bull', 'neutral']
                     can_go_short = current_regime in ['bear', 'neutral']
 
-                    if can_go_long and self.signal_engine.check_tier_1_long_signal(symbol, df_slice):
+                    if can_go_long and self.signal_engine.check_tier_1_long_signal(symbol, df_slice, signal_mode):
                         exec_price = current_price * 1.0005
                         self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'long')
-                    elif can_go_short and self.signal_engine.check_tier_1_short_signal(symbol, df_slice):
+                    elif can_go_short and self.signal_engine.check_tier_1_short_signal(symbol, df_slice, signal_mode):
                         exec_price = current_price * 0.9995
                         self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'short')
 

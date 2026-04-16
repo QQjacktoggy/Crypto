@@ -72,54 +72,56 @@ class SignalEngine:
     def calculate_daily_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Calculates long-term indicators on daily data for trend filtering.
+        Uses cascading SMAs: 200, 50, 20 - tries longest available first.
         """
-        sma_len = config.TREND_SMA_LENGTH
-        if df.empty or len(df) < sma_len:
-            # If not enough data for 200 SMA, use a shorter SMA (50) as fallback
-            fallback_len = min(50, len(df) - 1)
-            if fallback_len > 10:
-                df.ta.sma(length=fallback_len, append=True)
+        if df.empty or len(df) < 10:
             return df
 
-        df.ta.sma(length=sma_len, append=True)
+        # Always compute shorter SMAs as fallbacks
+        if len(df) > 20:
+            df.ta.sma(length=20, append=True)
+        if len(df) > 50:
+            df.ta.sma(length=50, append=True)
+
+        sma_len = config.TREND_SMA_LENGTH
+        if len(df) >= sma_len:
+            df.ta.sma(length=sma_len, append=True)
+
         return df
 
     def get_market_regime(self, df_daily: pd.DataFrame) -> str:
         """
         Determines the current market regime (bull or bear) based on the 1D SMA.
-        Falls back to shorter SMA if 200 SMA is not available.
+        Uses cascading fallback: SMA_200 → SMA_50 → SMA_20.
         """
         if df_daily.empty or len(df_daily) < 1:
             return 'neutral'
 
         latest = df_daily.iloc[-1]
 
-        # Try 200 SMA first, then fall back to shorter SMAs
-        sma_col = [c for c in df_daily.columns if c.startswith(f'SMA_{config.TREND_SMA_LENGTH}')]
-        if not sma_col:
-            sma_col = [c for c in df_daily.columns if c.startswith('SMA_')]
+        # Try SMAs from longest to shortest
+        for sma_prefix in [f'SMA_{config.TREND_SMA_LENGTH}', 'SMA_50', 'SMA_20']:
+            sma_col = [c for c in df_daily.columns if c.startswith(sma_prefix)]
+            if sma_col:
+                sma_val = latest[sma_col[0]]
+                close_val = latest['close']
 
-        if not sma_col:
-            return 'neutral'
-
-        sma_val = latest[sma_col[0]]
-        close_val = latest['close']
-
-        if pd.isna(sma_val):
-            return 'neutral'
-
-        if close_val > sma_val:
-            return 'bull'
-        elif close_val < sma_val:
-            return 'bear'
+                if not pd.isna(sma_val):
+                    if close_val > sma_val:
+                        return 'bull'
+                    elif close_val < sma_val:
+                        return 'bear'
 
         return 'neutral'
 
-    def check_tier_1_long_signal(self, symbol: str, df: pd.DataFrame) -> bool:
+    def check_tier_1_long_signal(self, symbol: str, df: pd.DataFrame, signal_mode: str = None) -> bool:
         """
         Checks if conditions for Tier 1 Long entry are met.
-        Uses multi-strategy approach: RSI+BB, MACD crossover, or EMA crossover.
+        signal_mode: 'classic' (RSI+BB only) or 'multi' (RSI+BB, MACD, EMA crossover)
         """
+        if signal_mode is None:
+            signal_mode = config.SIGNAL_MODE
+
         if df.empty or len(df) < 30:
             return False
 
@@ -140,7 +142,7 @@ class SignalEngine:
         if pd.isna(rsi_val):
             return False
 
-        # Strategy 1: Original RSI + Bollinger Band
+        # Strategy 1: Original RSI + Bollinger Band (always active)
         bb_signal = False
         if bbl_col:
             bbl_val = latest[bbl_col[0]]
@@ -148,36 +150,37 @@ class SignalEngine:
             if not pd.isna(bbl_val):
                 bb_signal = (rsi_val < config.RSI_LONG_ENTRY and close_val <= bbl_val)
 
-        # Strategy 2: MACD Bullish Crossover + RSI confirmation
-        macd_signal = False
-        if macdh_col and prev is not None:
-            macdh_val = latest[macdh_col[0]]
-            macdh_prev = prev[macdh_col[0]]
-            if not pd.isna(macdh_val) and not pd.isna(macdh_prev):
-                # MACD histogram crosses from negative to positive (bullish crossover)
-                macd_signal = (macdh_prev < 0 and macdh_val > 0 and rsi_val < 45)
+        if signal_mode == 'classic':
+            traditional_signal = bb_signal
+        else:
+            # Strategy 2: MACD Bullish Crossover + RSI confirmation
+            macd_signal = False
+            if macdh_col and prev is not None:
+                macdh_val = latest[macdh_col[0]]
+                macdh_prev = prev[macdh_col[0]]
+                if not pd.isna(macdh_val) and not pd.isna(macdh_prev):
+                    macd_signal = (macdh_prev < 0 and macdh_val > 0 and rsi_val < 45)
 
-        # Strategy 3: EMA Crossover + RSI confirmation
-        ema_signal = False
-        if ema_fast_col and ema_slow_col and prev is not None:
-            ema_fast = latest[ema_fast_col[0]]
-            ema_slow = latest[ema_slow_col[0]]
-            ema_fast_prev = prev[ema_fast_col[0]]
-            ema_slow_prev = prev[ema_slow_col[0]]
-            if not any(pd.isna(v) for v in [ema_fast, ema_slow, ema_fast_prev, ema_slow_prev]):
-                # EMA fast crosses above slow (golden cross)
-                ema_signal = (ema_fast_prev <= ema_slow_prev and ema_fast > ema_slow and rsi_val < 50)
+            # Strategy 3: EMA Crossover + RSI confirmation
+            ema_signal = False
+            if ema_fast_col and ema_slow_col and prev is not None:
+                ema_fast = latest[ema_fast_col[0]]
+                ema_slow = latest[ema_slow_col[0]]
+                ema_fast_prev = prev[ema_fast_col[0]]
+                ema_slow_prev = prev[ema_slow_col[0]]
+                if not any(pd.isna(v) for v in [ema_fast, ema_slow, ema_fast_prev, ema_slow_prev]):
+                    ema_signal = (ema_fast_prev <= ema_slow_prev and ema_fast > ema_slow and rsi_val < 50)
+
+            traditional_signal = bb_signal or macd_signal or ema_signal
 
         # Volume filter: only trade when volume is above average
         vol_filter = True
         if 'vol_sma_20' in df.columns:
             vol_sma = latest['vol_sma_20']
             if not pd.isna(vol_sma) and vol_sma > 0:
-                vol_filter = latest['volume'] >= vol_sma * 0.7  # At least 70% of avg volume
+                vol_filter = latest['volume'] >= vol_sma * 0.7
 
-        traditional_signal = (bb_signal or macd_signal or ema_signal) and vol_filter
-
-        if not traditional_signal:
+        if not (traditional_signal and vol_filter):
             return False
 
         # AI confirmation (optional)
@@ -191,11 +194,14 @@ class SignalEngine:
 
         return True
 
-    def check_tier_1_short_signal(self, symbol: str, df: pd.DataFrame) -> bool:
+    def check_tier_1_short_signal(self, symbol: str, df: pd.DataFrame, signal_mode: str = None) -> bool:
         """
         Checks if conditions for Tier 1 Short entry are met.
-        Uses multi-strategy approach: RSI+BB, MACD crossover, or EMA crossover.
+        signal_mode: 'classic' (RSI+BB only) or 'multi' (RSI+BB, MACD, EMA crossover)
         """
+        if signal_mode is None:
+            signal_mode = config.SIGNAL_MODE
+
         if df.empty or len(df) < 30:
             return False
 
@@ -215,7 +221,7 @@ class SignalEngine:
         if pd.isna(rsi_val):
             return False
 
-        # Strategy 1: Original RSI + Bollinger Band
+        # Strategy 1: Original RSI + Bollinger Band (always active)
         bb_signal = False
         if bbu_col:
             bbu_val = latest[bbu_col[0]]
@@ -223,25 +229,28 @@ class SignalEngine:
             if not pd.isna(bbu_val):
                 bb_signal = (rsi_val > config.RSI_SHORT_ENTRY and close_val >= bbu_val)
 
-        # Strategy 2: MACD Bearish Crossover + RSI confirmation
-        macd_signal = False
-        if macdh_col and prev is not None:
-            macdh_val = latest[macdh_col[0]]
-            macdh_prev = prev[macdh_col[0]]
-            if not pd.isna(macdh_val) and not pd.isna(macdh_prev):
-                # MACD histogram crosses from positive to negative (bearish crossover)
-                macd_signal = (macdh_prev > 0 and macdh_val < 0 and rsi_val > 55)
+        if signal_mode == 'classic':
+            traditional_signal = bb_signal
+        else:
+            # Strategy 2: MACD Bearish Crossover + RSI confirmation
+            macd_signal = False
+            if macdh_col and prev is not None:
+                macdh_val = latest[macdh_col[0]]
+                macdh_prev = prev[macdh_col[0]]
+                if not pd.isna(macdh_val) and not pd.isna(macdh_prev):
+                    macd_signal = (macdh_prev > 0 and macdh_val < 0 and rsi_val > 55)
 
-        # Strategy 3: EMA Crossover + RSI confirmation
-        ema_signal = False
-        if ema_fast_col and ema_slow_col and prev is not None:
-            ema_fast = latest[ema_fast_col[0]]
-            ema_slow = latest[ema_slow_col[0]]
-            ema_fast_prev = prev[ema_fast_col[0]]
-            ema_slow_prev = prev[ema_slow_col[0]]
-            if not any(pd.isna(v) for v in [ema_fast, ema_slow, ema_fast_prev, ema_slow_prev]):
-                # EMA fast crosses below slow (death cross)
-                ema_signal = (ema_fast_prev >= ema_slow_prev and ema_fast < ema_slow and rsi_val > 50)
+            # Strategy 3: EMA Crossover + RSI confirmation
+            ema_signal = False
+            if ema_fast_col and ema_slow_col and prev is not None:
+                ema_fast = latest[ema_fast_col[0]]
+                ema_slow = latest[ema_slow_col[0]]
+                ema_fast_prev = prev[ema_fast_col[0]]
+                ema_slow_prev = prev[ema_slow_col[0]]
+                if not any(pd.isna(v) for v in [ema_fast, ema_slow, ema_fast_prev, ema_slow_prev]):
+                    ema_signal = (ema_fast_prev >= ema_slow_prev and ema_fast < ema_slow and rsi_val > 50)
+
+            traditional_signal = bb_signal or macd_signal or ema_signal
 
         # Volume filter
         vol_filter = True
@@ -250,9 +259,7 @@ class SignalEngine:
             if not pd.isna(vol_sma) and vol_sma > 0:
                 vol_filter = latest['volume'] >= vol_sma * 0.7
 
-        traditional_signal = (bb_signal or macd_signal or ema_signal) and vol_filter
-
-        if not traditional_signal:
+        if not (traditional_signal and vol_filter):
             return False
 
         # AI confirmation (optional)
