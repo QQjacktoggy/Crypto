@@ -300,6 +300,12 @@ class BacktestEngine:
                     if len(self.positions) >= config.MAX_ACTIVE_TRADES:
                         break
 
+        # Force-close any remaining open positions at last known price
+        last_ts = common_timestamps.iloc[-1]
+        for symbol in list(self.positions.keys()):
+            last_price = indicators[symbol].loc[last_ts]['close']
+            self.close_position(symbol, last_price, last_ts, is_tp=True)
+
         self.print_report()
 
     def print_report(self):

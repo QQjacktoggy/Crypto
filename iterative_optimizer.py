@@ -1,10 +1,12 @@
 """
-Iterative Backtest Optimizer
-============================
-1. Runs a 365-day baseline backtest
-2. Analyses monthly PnL, drawdown, win-rate
-3. Adjusts parameters to fix weaknesses
-4. Repeats for 5 iterations
+Iterative Backtest Optimizer v2
+===============================
+Compound-interest aware, multi-dimensional parameter search.
+
+1. Runs a 365-day baseline backtest (COMPOUND_MODE = True)
+2. Analyses monthly PnL, drawdown, win-rate, profit factor
+3. Keeps the BEST result seen so far and explores a NEW axis each iteration
+4. Repeats for 10 iterations (11 total runs including baseline)
 5. Prints a comprehensive multi-iteration comparison report
 
 Output files
@@ -18,8 +20,6 @@ import sys
 import os
 import copy
 import logging
-import json
-import textwrap
 from datetime import datetime
 
 import pandas as pd
@@ -49,6 +49,19 @@ DEFAULT_PARAMS = {
 }
 
 DAYS = 365   # fixed 1-year horizon
+NUM_ITERATIONS = 10  # baseline + 10 optimisation rounds = 11 total runs
+
+# ── parameter boundaries ────────────────────────────────────────────────────
+BOUNDS = {
+    "TIER_MARGIN_PCT":   (0.015, 0.08),
+    "LEVERAGE":          (2, 8),
+    "TP_MARGIN_ROI":     (0.05, 0.30),
+    "SL_GLOBAL_CAP_PCT": (-0.25, -0.04),
+    "RSI_LONG_ENTRY":    (15, 35),
+    "RSI_SHORT_ENTRY":   (65, 85),
+    "TIER_2_DEV_PCT":    (0.008, 0.03),
+    "MAX_ACTIVE_TRADES": (2, 6),
+}
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -60,8 +73,38 @@ def _apply(params: dict):
 
 
 def _snapshot() -> dict:
-    """Return current relevant config values."""
     return {k: getattr(config, k) for k in DEFAULT_PARAMS}
+
+
+def _clamp(p: dict) -> dict:
+    """Clamp all parameters to their safe boundaries."""
+    for k, (lo, hi) in BOUNDS.items():
+        if k in p:
+            if isinstance(p[k], int):
+                p[k] = max(lo, min(int(p[k]), hi))
+            else:
+                p[k] = round(max(lo, min(p[k], hi)), 4)
+    # keep tier-3 = 2x tier-2
+    p["TIER_3_DEV_PCT"] = round(p["TIER_2_DEV_PCT"] * 2, 4)
+    # RSI pair must stay symmetric
+    p["RSI_SHORT_ENTRY"] = max(p["RSI_SHORT_ENTRY"], 100 - p["RSI_LONG_ENTRY"])
+    return p
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Score function: balances PnL, drawdown, and consistency
+# ────────────────────────────────────────────────────────────────────────────
+def score(r: dict) -> float:
+    """
+    Composite score: higher is better.
+    Rewards net PnL and win rate, penalises drawdown and negative months.
+    """
+    pnl_score = r["total_pnl"]
+    mdd_penalty = -r["mdd_pct"] * 1.5          # heavy penalty on drawdown
+    wr_bonus = (r["win_rate"] - 90) * 2         # bonus above 90% WR
+    neg_penalty = -r["neg_months"] * 5          # penalty per negative month
+    pf_bonus = min(r["profit_factor"], 5) * 10  # cap PF contribution
+    return pnl_score + mdd_penalty + wr_bonus + neg_penalty + pf_bonus
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -101,20 +144,21 @@ def run_backtest(params: dict, label: str = "") -> dict:
                     "net_pnl":  float(grp["pnl"].sum()),
                 }
 
-        # avg win/loss sizes
         avg_win  = (sum(t["pnl"] for t in wins)   / len(wins))   if wins   else 0.0
         avg_loss = (sum(t["pnl"] for t in losses) / len(losses)) if losses else 0.0
-        profit_factor = (-sum(t["pnl"] for t in wins) /
-                         sum(t["pnl"] for t in losses)) if losses and sum(t["pnl"] for t in losses) != 0 else float("inf")
+        total_loss = sum(t["pnl"] for t in losses)
+        profit_factor = (-sum(t["pnl"] for t in wins) / total_loss) if total_loss != 0 else float("inf")
 
-        # negative months count
         neg_months = sum(1 for v in monthly.values() if v["net_pnl"] < 0)
+
+        roi_pct = ((final_bal - engine.initial_balance) / engine.initial_balance) * 100
 
         return {
             "label":         label,
             "params":        copy.deepcopy(params),
             "total_pnl":     total_pnl,
             "final_balance": final_bal,
+            "roi_pct":       roi_pct,
             "win_rate":      win_rate,
             "mdd_pct":       mdd,
             "max_margin":    max_margin,
@@ -130,76 +174,82 @@ def run_backtest(params: dict, label: str = "") -> dict:
 
 
 # ────────────────────────────────────────────────────────────────────────────
-# Parameter optimiser: analyse weaknesses → propose next params
+# Multi-dimensional parameter optimiser
 # ────────────────────────────────────────────────────────────────────────────
-def propose_next_params(current: dict, result: dict, iteration: int) -> dict:
-    """
-    Rule-based adaptive parameter tuning.
-    Each iteration applies ONE primary fix strategy + minor tweaks.
-    """
-    p = copy.deepcopy(current)
 
-    mdd       = result["mdd_pct"]
-    wr        = result["win_rate"]
-    pnl       = result["total_pnl"]
-    neg_m     = result["neg_months"]
-    avg_win   = result["avg_win"]
-    avg_loss  = result["avg_loss"]
-    pf        = result["profit_factor"]
+# 10 distinct exploration strategies — one per iteration
+STRATEGIES = [
+    "raise_tp",           # 1: raise TP target to capture more per win
+    "tighten_sl",         # 2: tighten global SL cap for capital protection
+    "boost_margin",       # 3: increase position size for compound growth
+    "add_leverage",       # 4: increase leverage for amplified returns
+    "relax_rsi",          # 5: relax RSI thresholds for more trade opportunities
+    "widen_dca",          # 6: wider DCA tiers to average at better prices
+    "narrow_dca",         # 7: narrow DCA tiers to recover faster
+    "max_trades_up",      # 8: allow more concurrent trades
+    "aggressive_combo",   # 9: combine TP + margin + leverage push
+    "conservative_combo", # 10: reduce risk across the board
+]
 
-    # ── decide primary strategy ─────────────────────────────────────────────
-    # Priority 1: catastrophic drawdown → protect capital first
-    if mdd > 60:
-        p["TIER_MARGIN_PCT"]   = round(max(p["TIER_MARGIN_PCT"] - 0.005, 0.015), 4)
-        p["SL_GLOBAL_CAP_PCT"] = round(max(p["SL_GLOBAL_CAP_PCT"] + 0.02, -0.25), 3)
+def propose_next_params(best_params: dict, best_result: dict,
+                        current_result: dict, iteration: int) -> dict:
+    """
+    Each iteration explores a DIFFERENT axis from the best-seen params.
+    If the current iteration worsened things, we revert to best and try
+    a different strategy. No stuck-in-a-rut loops.
+    """
+    # always start from the best-known parameters
+    p = copy.deepcopy(best_params)
+
+    strategy = STRATEGIES[(iteration - 1) % len(STRATEGIES)]
+    mdd = best_result["mdd_pct"]
+    wr  = best_result["win_rate"]
+    pf  = best_result["profit_factor"]
+
+    if strategy == "raise_tp":
+        p["TP_MARGIN_ROI"] = round(p["TP_MARGIN_ROI"] + 0.03, 3)
+
+    elif strategy == "tighten_sl":
+        p["SL_GLOBAL_CAP_PCT"] = round(p["SL_GLOBAL_CAP_PCT"] + 0.02, 3)
+
+    elif strategy == "boost_margin":
+        p["TIER_MARGIN_PCT"] = round(p["TIER_MARGIN_PCT"] + 0.01, 4)
+
+    elif strategy == "add_leverage":
+        p["LEVERAGE"] = p["LEVERAGE"] + 1
+
+    elif strategy == "relax_rsi":
+        p["RSI_LONG_ENTRY"]  = p["RSI_LONG_ENTRY"]  + 3
+        p["RSI_SHORT_ENTRY"] = p["RSI_SHORT_ENTRY"] - 3
+
+    elif strategy == "widen_dca":
+        p["TIER_2_DEV_PCT"] = round(p["TIER_2_DEV_PCT"] + 0.005, 4)
+
+    elif strategy == "narrow_dca":
+        p["TIER_2_DEV_PCT"] = round(p["TIER_2_DEV_PCT"] - 0.003, 4)
+
+    elif strategy == "max_trades_up":
+        p["MAX_ACTIVE_TRADES"] = p["MAX_ACTIVE_TRADES"] + 1
+
+    elif strategy == "aggressive_combo":
+        p["TP_MARGIN_ROI"]   = round(p["TP_MARGIN_ROI"]   + 0.02, 3)
+        p["TIER_MARGIN_PCT"] = round(p["TIER_MARGIN_PCT"] + 0.008, 4)
+        p["LEVERAGE"]        = p["LEVERAGE"] + 1
+
+    elif strategy == "conservative_combo":
+        p["TIER_MARGIN_PCT"]   = round(p["TIER_MARGIN_PCT"]   - 0.005, 4)
         p["LEVERAGE"]          = max(p["LEVERAGE"] - 1, 2)
+        p["SL_GLOBAL_CAP_PCT"] = round(p["SL_GLOBAL_CAP_PCT"] + 0.02, 3)
+        p["TP_MARGIN_ROI"]     = round(p["TP_MARGIN_ROI"]     - 0.01, 3)
 
-    # Priority 2: too many losing months → tighten entry quality
-    elif neg_m >= 3:
-        p["RSI_LONG_ENTRY"]  = max(p["RSI_LONG_ENTRY"]  - 2, 18)
-        p["RSI_SHORT_ENTRY"] = min(p["RSI_SHORT_ENTRY"] + 2, 82)
-        p["TIER_2_DEV_PCT"]  = round(p["TIER_2_DEV_PCT"] + 0.005, 3)
-
-    # Priority 3: low win rate → more selective entries
-    elif wr < 80:
-        p["RSI_LONG_ENTRY"]  = max(p["RSI_LONG_ENTRY"]  - 3, 15)
-        p["RSI_SHORT_ENTRY"] = min(p["RSI_SHORT_ENTRY"] + 3, 85)
-
-    # Priority 4: high win rate but low PnL → push TP higher, add margin
-    elif wr >= 85 and pnl < 80:
-        p["TP_MARGIN_ROI"]   = round(min(p["TP_MARGIN_ROI"]  + 0.02, 0.25), 3)
-        p["TIER_MARGIN_PCT"] = round(min(p["TIER_MARGIN_PCT"] + 0.005, 0.06), 4)
-
-    # Priority 5: already profitable but profit factor weak → re-balance TP/SL
-    elif 0 < pf < 1.5:
-        p["TP_MARGIN_ROI"]   = round(min(p["TP_MARGIN_ROI"] + 0.03, 0.25), 3)
-        p["SL_GLOBAL_CAP_PCT"] = round(max(p["SL_GLOBAL_CAP_PCT"] - 0.02, -0.20), 3)
-
-    # Priority 6: everything is good → scale up slightly
-    else:
-        p["TIER_MARGIN_PCT"] = round(min(p["TIER_MARGIN_PCT"] + 0.003, 0.06), 4)
-        p["TP_MARGIN_ROI"]   = round(min(p["TP_MARGIN_ROI"]  + 0.01, 0.25), 3)
-        p["MAX_ACTIVE_TRADES"] = min(p["MAX_ACTIVE_TRADES"] + 1, 5)
-
-    # ── always clamp to safe boundaries ─────────────────────────────────────
-    p["LEVERAGE"]          = max(2, min(p["LEVERAGE"],          8))
-    p["TIER_MARGIN_PCT"]   = max(0.015, min(p["TIER_MARGIN_PCT"],  0.07))
-    p["TP_MARGIN_ROI"]     = max(0.06,  min(p["TP_MARGIN_ROI"],    0.30))
-    p["SL_GLOBAL_CAP_PCT"] = max(-0.25, min(p["SL_GLOBAL_CAP_PCT"], -0.05))
-    p["RSI_LONG_ENTRY"]    = max(15,    min(p["RSI_LONG_ENTRY"],   35))
-    p["RSI_SHORT_ENTRY"]   = max(65,    min(p["RSI_SHORT_ENTRY"],  85))
-    p["TIER_2_DEV_PCT"]    = max(0.01,  min(p["TIER_2_DEV_PCT"],   0.03))
-    p["TIER_3_DEV_PCT"]    = round(p["TIER_2_DEV_PCT"] * 2, 3)          # keep tier-3 = 2× tier-2
-    p["MAX_ACTIVE_TRADES"] = max(2, min(p["MAX_ACTIVE_TRADES"],    5))
-
-    return p
+    p = _clamp(p)
+    return p, strategy
 
 
 # ────────────────────────────────────────────────────────────────────────────
 # Report builders
 # ────────────────────────────────────────────────────────────────────────────
 def build_monthly_comparison(all_results: list) -> pd.DataFrame:
-    """Wide DataFrame: rows = months, columns = iteration PnL values."""
     all_months = sorted(
         set(m for r in all_results for m in r["monthly"].keys())
     )
@@ -215,92 +265,107 @@ def build_monthly_comparison(all_results: list) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def print_separator(char="=", width=72):
-    print(char * width)
-
-
 def fmt_param_delta(prev: dict, curr: dict) -> str:
     changes = []
     for k in DEFAULT_PARAMS:
         pv, cv = prev.get(k), curr.get(k)
         if pv != cv:
-            changes.append(f"  {k}: {pv} → {cv}")
+            changes.append(f"  {k}: {pv} -> {cv}")
     return "\n".join(changes) if changes else "  (no parameter changes)"
 
 
-def write_comprehensive_report(all_results: list, monthly_df: pd.DataFrame,
+def write_comprehensive_report(all_results: list, best_result: dict,
+                                monthly_df: pd.DataFrame,
                                 report_path: str = "comprehensive_report.txt"):
     lines = []
-    W = 72
+    W = 80
 
     def add(s=""):
         lines.append(s)
 
     add("=" * W)
-    add(" ITERATIVE BACKTEST OPTIMIZATION — COMPREHENSIVE REPORT")
-    add(f" Generated : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    add(f" Horizon   : {DAYS} days  |  Symbols: {', '.join(config.SYMBOLS)}")
-    add(f" Timeframe : {config.TIMEFRAME}  |  Initial Capital: {config.BASE_CAPITAL} USDT")
+    add("  ITERATIVE BACKTEST OPTIMIZATION v2 — COMPREHENSIVE REPORT")
+    add(f"  Generated : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    add(f"  Horizon   : {DAYS} days  |  Symbols: {', '.join(config.SYMBOLS)}")
+    add(f"  Timeframe : {config.TIMEFRAME}  |  Initial Capital: {config.BASE_CAPITAL} USDT")
+    add(f"  Mode      : COMPOUND INTEREST (profits reinvested each trade)")
     add("=" * W)
     add()
 
-    # ── iteration-by-iteration summary ──────────────────────────────────────
-    add("━" * W)
+    # ── iteration summary table ──────────────────────────────────────────────
+    add("=" * W)
     add("  ITERATION SUMMARY")
-    add("━" * W)
-    hdr = (f"{'Label':<18} {'Net PnL':>9} {'FinalBal':>10} {'WinRate':>9}"
-           f" {'MDD%':>7} {'Trades':>7} {'NegMo':>6} {'PF':>6}")
+    add("=" * W)
+    hdr = (f"{'Label':<15} {'Net PnL':>9} {'FinalBal':>9} {'ROI%':>8}"
+           f" {'WR%':>7} {'MDD%':>7} {'Trades':>6} {'NegMo':>5} {'PF':>6} {'Score':>7}")
     add(hdr)
     add("-" * W)
 
     for r in all_results:
-        pf_str = f"{r['profit_factor']:.2f}" if r["profit_factor"] != float("inf") else "  ∞"
-        row = (f"{r['label']:<18} {r['total_pnl']:>+9.2f} {r['final_balance']:>10.2f}"
-               f" {r['win_rate']:>8.2f}% {r['mdd_pct']:>6.2f}% {r['trades']:>7}"
-               f" {r['neg_months']:>6} {pf_str:>6}")
+        pf_str = f"{r['profit_factor']:.2f}" if r["profit_factor"] != float("inf") else "  inf"
+        sc = score(r)
+        best_mark = " <-- BEST" if r["label"] == best_result["label"] else ""
+        row = (f"{r['label']:<15} {r['total_pnl']:>+9.2f} {r['final_balance']:>9.2f}"
+               f" {r['roi_pct']:>+7.1f}% {r['win_rate']:>6.1f}% {r['mdd_pct']:>6.1f}%"
+               f" {r['trades']:>6} {r['neg_months']:>5} {pf_str:>6} {sc:>+7.1f}{best_mark}")
         add(row)
     add()
 
+    # ── compound growth analysis ─────────────────────────────────────────────
+    add("=" * W)
+    add("  COMPOUND GROWTH ANALYSIS (Best: %s)" % best_result["label"])
+    add("=" * W)
+    add(f"  Initial Capital    : {config.BASE_CAPITAL:.2f} USDT")
+    add(f"  Final Balance      : {best_result['final_balance']:.2f} USDT")
+    add(f"  Net PnL (trades)   : {best_result['total_pnl']:+.2f} USDT")
+    add(f"  ROI                : {best_result['roi_pct']:+.1f}%")
+    add(f"  Max Drawdown       : {best_result['mdd_pct']:.1f}%")
+    add(f"  Max Margin Usage   : {best_result['max_margin']:.2f} USDT")
+    add(f"  Win Rate           : {best_result['win_rate']:.1f}%")
+    pf_disp = f"{best_result['profit_factor']:.2f}" if best_result["profit_factor"] != float("inf") else "inf"
+    add(f"  Profit Factor      : {pf_disp}")
+    add(f"  Total Trades       : {best_result['trades']}")
+    add(f"  Negative Months    : {best_result['neg_months']}")
+    add()
+
     # ── parameter evolution ─────────────────────────────────────────────────
-    add("━" * W)
+    add("=" * W)
     add("  PARAMETER EVOLUTION")
-    add("━" * W)
+    add("=" * W)
     for i, r in enumerate(all_results):
         p = r["params"]
-        add(f"  [{r['label']}]")
+        strat = r.get("strategy", "-")
+        sc = score(r)
+        add(f"  [{r['label']}]  strategy={strat}  score={sc:+.1f}")
         for k, v in p.items():
             add(f"    {k:<22} = {v}")
         if i > 0:
-            add("  Changes vs previous iteration:")
+            add("  Changes vs previous:")
             add(fmt_param_delta(all_results[i - 1]["params"], p))
         add()
 
-    # ── monthly detail per iteration ────────────────────────────────────────
-    add("━" * W)
-    add("  MONTHLY TRADING DETAIL — BY ITERATION")
-    add("━" * W)
-
-    for r in all_results:
-        add()
-        add(f"  ── {r['label']} ──")
-        add(f"  {'Month':<10} {'Trades':>7} {'W':>4} {'L':>4} {'WR%':>7} {'Net PnL':>10} {'Cum PnL':>10}")
-        add("  " + "-" * 60)
-        cum = 0.0
-        for month in sorted(r["monthly"].keys()):
-            m = r["monthly"][month]
-            cum += m["net_pnl"]
-            add(f"  {month:<10} {m['trades']:>7} {m['wins']:>4} {m['losses']:>4}"
-                f" {m['win_rate']:>6.1f}% {m['net_pnl']:>+10.2f} {cum:>+10.2f}")
-
+    # ── monthly detail for BEST iteration ───────────────────────────────────
+    add("=" * W)
+    add("  MONTHLY DETAIL — BEST ITERATION: %s" % best_result["label"])
+    add("=" * W)
+    add(f"  {'Month':<10} {'Trades':>7} {'W':>4} {'L':>4} {'WR%':>7} {'Net PnL':>10} {'Cum PnL':>10}")
+    add("  " + "-" * 62)
+    cum = 0.0
+    for month in sorted(best_result["monthly"].keys()):
+        m = best_result["monthly"][month]
+        cum += m["net_pnl"]
+        add(f"  {month:<10} {m['trades']:>7} {m['wins']:>4} {m['losses']:>4}"
+            f" {m['win_rate']:>6.1f}% {m['net_pnl']:>+10.2f} {cum:>+10.2f}")
     add()
 
-    # ── month-by-month PnL comparison across all iterations ─────────────────
-    add("━" * W)
+    # ── month-by-month PnL comparison ────────────────────────────────────────
+    add("=" * W)
     add("  MONTH-BY-MONTH PnL COMPARISON (all iterations)")
-    add("━" * W)
-    labels   = [r["label"] for r in all_results]
-    col_w    = 11
-    hdr2     = f"  {'Month':<10}" + "".join(f" {lb:>{col_w}}" for lb in labels)
+    add("=" * W)
+    # show Baseline, best, and a few interesting ones
+    labels = [r["label"] for r in all_results]
+    col_w = 10
+    hdr2 = f"  {'Month':<10}" + "".join(f" {lb:>{col_w}}" for lb in labels)
     add(hdr2)
     add("  " + "-" * (12 + col_w * len(labels)))
 
@@ -311,44 +376,41 @@ def write_comprehensive_report(all_results: list, monthly_df: pd.DataFrame,
             v = row.get(pnl_key, 0.0)
             line += f" {v:>+{col_w}.2f}"
         add(line)
-
     add()
 
     # ── key takeaways ────────────────────────────────────────────────────────
-    best_pnl = max(all_results, key=lambda r: r["total_pnl"])
-    best_mdd = min(all_results, key=lambda r: r["mdd_pct"])
-    best_wr  = max(all_results, key=lambda r: r["win_rate"])
-    last     = all_results[-1]
+    best_pnl_r = max(all_results, key=lambda r: r["total_pnl"])
+    best_mdd_r = min(all_results, key=lambda r: r["mdd_pct"])
+    best_wr_r  = max(all_results, key=lambda r: r["win_rate"])
+    best_sc_r  = max(all_results, key=score)
 
-    add("━" * W)
-    add("  KEY TAKEAWAYS")
-    add("━" * W)
-    add(f"  Highest Net PnL     : {best_pnl['label']}  → {best_pnl['total_pnl']:+.2f} USDT")
-    add(f"  Lowest Max Drawdown : {best_mdd['label']}  → {best_mdd['mdd_pct']:.2f}%")
-    add(f"  Best Win Rate       : {best_wr['label']}   → {best_wr['win_rate']:.2f}%")
+    add("=" * W)
+    add("  KEY TAKEAWAYS & RECOMMENDED PARAMETERS")
+    add("=" * W)
+    add(f"  Highest Net PnL      : {best_pnl_r['label']:<14} -> {best_pnl_r['total_pnl']:+.2f} USDT ({best_pnl_r['roi_pct']:+.1f}% ROI)")
+    add(f"  Lowest Max Drawdown  : {best_mdd_r['label']:<14} -> {best_mdd_r['mdd_pct']:.1f}%")
+    add(f"  Best Win Rate        : {best_wr_r['label']:<14} -> {best_wr_r['win_rate']:.1f}%")
+    add(f"  Best Composite Score : {best_sc_r['label']:<14} -> score {score(best_sc_r):+.1f}")
     add()
-    add(f"  Final Optimised Parameters ({last['label']}):")
-    for k, v in last["params"].items():
+    add(f"  RECOMMENDED PARAMETERS (from {best_sc_r['label']}):")
+    for k, v in best_sc_r["params"].items():
         add(f"    {k:<22} = {v}")
     add()
-    add("  Recommendation:")
-    if last["mdd_pct"] > 50:
-        add("  ⚠  MDD still elevated. Further reduce TIER_MARGIN_PCT / LEVERAGE.")
-    elif last["mdd_pct"] <= 25 and last["total_pnl"] > 50:
-        add("  ✅ Strategy looks deployment-ready. Monitor live performance closely.")
+    if best_sc_r["mdd_pct"] > 50:
+        add("  WARNING: MDD > 50%. Consider further reducing TIER_MARGIN_PCT / LEVERAGE.")
+    elif best_sc_r["mdd_pct"] <= 30 and best_sc_r["total_pnl"] > 30:
+        add("  READY: Strategy looks deployment-ready with compound growth.")
+        add("  Monitor live performance; consider paper-trading first.")
     else:
-        add("  ℹ  Good progress. Consider another optimisation round or live paper-trading.")
+        add("  PROGRESS: Good risk-adjusted result. Consider additional tuning or paper-trading.")
     add()
     add("=" * W)
-    add(f" Report written to: {report_path}")
+    add(f"  Report written to: {report_path}")
     add("=" * W)
 
     report_text = "\n".join(lines)
-
-    # print to stdout
     print(report_text)
 
-    # save to file
     with open(report_path, "w") as f:
         f.write(report_text)
 
@@ -359,57 +421,82 @@ def write_comprehensive_report(all_results: list, monthly_df: pd.DataFrame,
 # Main loop
 # ────────────────────────────────────────────────────────────────────────────
 def main():
-    print("=" * 72)
-    print(" ITERATIVE BACKTEST OPTIMIZER — 5 ITERATIONS × 365 DAYS")
-    print("=" * 72)
+    print("=" * 80)
+    print("  ITERATIVE BACKTEST OPTIMIZER v2 — %d ITERATIONS x %d DAYS" % (NUM_ITERATIONS, DAYS))
+    print("  Mode: COMPOUND INTEREST (profits reinvested)")
+    print("=" * 80)
     print()
 
     params      = copy.deepcopy(DEFAULT_PARAMS)
     all_results = []
 
-    # ── Iteration 0: Baseline ───────────────────────────────────────────────
-    NUM_ITERATIONS = 5   # baseline + 5 optimisation rounds = 6 total runs
+    # track the best-scoring result across all iterations
+    best_result = None
+    best_params = copy.deepcopy(DEFAULT_PARAMS)
+    best_score  = float("-inf")
 
     for iteration in range(NUM_ITERATIONS + 1):
         if iteration == 0:
             label = "Baseline"
+            strategy = "-"
         else:
             label = f"Iter_{iteration}"
 
-        print(f"[{iteration}/{NUM_ITERATIONS}] Running {label}  (params below)")
+        print(f"[{iteration}/{NUM_ITERATIONS}] Running {label}")
         for k, v in params.items():
             print(f"         {k} = {v}")
+        if iteration > 0:
+            print(f"         strategy = {strategy}")
         print()
 
         result = run_backtest(params, label=label)
+        result["strategy"] = strategy if iteration > 0 else "baseline"
         all_results.append(result)
 
-        pf_disp = f"{result['profit_factor']:.2f}" if result["profit_factor"] != float("inf") else "∞"
-        print(f"  → Net PnL: {result['total_pnl']:+.2f} USDT  |  "
-              f"Balance: {result['final_balance']:.2f}  |  "
+        sc = score(result)
+        pf_disp = f"{result['profit_factor']:.2f}" if result["profit_factor"] != float("inf") else "inf"
+        is_new_best = sc > best_score
+
+        print(f"  -> PnL: {result['total_pnl']:+.2f}  |  "
+              f"Bal: {result['final_balance']:.2f}  |  "
+              f"ROI: {result['roi_pct']:+.1f}%  |  "
               f"WR: {result['win_rate']:.1f}%  |  "
               f"MDD: {result['mdd_pct']:.1f}%  |  "
               f"PF: {pf_disp}  |  "
-              f"NegMonths: {result['neg_months']}")
+              f"Score: {sc:+.1f}")
+
+        if is_new_best:
+            best_score  = sc
+            best_result = result
+            best_params = copy.deepcopy(params)
+            print(f"  ** NEW BEST (score {sc:+.1f}) **")
+        else:
+            print(f"  -- reverting to best params ({best_result['label']}, score {best_score:+.1f})")
         print()
 
         if iteration < NUM_ITERATIONS:
-            params = propose_next_params(params, result, iteration)
-            print(f"  → Proposed parameters for Iter_{iteration + 1}:")
-            prev = all_results[-1]["params"]
+            params, strategy = propose_next_params(
+                best_params, best_result or result, result, iteration + 1
+            )
+            prev_p = all_results[-1]["params"]
+            print(f"  -> Next: Iter_{iteration + 1}  strategy={strategy}")
             for k, v in params.items():
-                marker = " ◄" if v != prev.get(k) else ""
+                marker = " <-" if v != prev_p.get(k) else ""
                 print(f"       {k:<22} = {v}{marker}")
             print()
 
     # ── Save CSVs ────────────────────────────────────────────────────────────
     summary_rows = []
     for r in all_results:
-        row = {"label": r["label"], "total_pnl": r["total_pnl"],
-               "final_balance": r["final_balance"], "win_rate": r["win_rate"],
-               "mdd_pct": r["mdd_pct"], "trades": r["trades"],
-               "avg_win": r["avg_win"], "avg_loss": r["avg_loss"],
-               "profit_factor": r["profit_factor"], "neg_months": r["neg_months"]}
+        row = {
+            "label": r["label"], "strategy": r.get("strategy", ""),
+            "total_pnl": r["total_pnl"], "final_balance": r["final_balance"],
+            "roi_pct": r["roi_pct"], "win_rate": r["win_rate"],
+            "mdd_pct": r["mdd_pct"], "trades": r["trades"],
+            "avg_win": r["avg_win"], "avg_loss": r["avg_loss"],
+            "profit_factor": r["profit_factor"], "neg_months": r["neg_months"],
+            "score": score(r),
+        }
         row.update({f"param_{k}": v for k, v in r["params"].items()})
         summary_rows.append(row)
 
@@ -423,7 +510,8 @@ def main():
 
     # ── Write final report ───────────────────────────────────────────────────
     print()
-    write_comprehensive_report(all_results, monthly_df, "comprehensive_report.txt")
+    write_comprehensive_report(all_results, best_result, monthly_df,
+                                "comprehensive_report.txt")
 
 
 if __name__ == "__main__":
