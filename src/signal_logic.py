@@ -378,6 +378,9 @@ class SignalEngine:
         """
         Checks if conditions for Tier 3 entry are met.
         """
+        if self.get_param('MOMENTUM_GATED_DCA') and (df is None or df.empty):
+            return False
+
         if self.get_param('MOMENTUM_GATED_DCA') and df is not None and not df.empty:
             atr_ratio = self.get_atr_ratio(df)
             if atr_ratio is not None and atr_ratio > self.get_param('TIER_3_MAX_ATR_RATIO'):

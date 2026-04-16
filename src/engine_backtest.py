@@ -33,7 +33,8 @@ class BacktestEngine:
             'HIGH_VOL_THRESHOLD', 'LOW_VOL_THRESHOLD',
             'RSI_LONG_ENTRY_HIGH_VOL', 'RSI_LONG_ENTRY_LOW_VOL',
             'RSI_SHORT_ENTRY_HIGH_VOL', 'RSI_SHORT_ENTRY_LOW_VOL',
-            'MAX_CONSECUTIVE_LOSSES', 'ENABLE_MONTHLY_CIRCUIT_BREAKER',
+            'MAX_CONSECUTIVE_LOSSES', 'CONSECUTIVE_LOSS_COOLDOWN_MULT',
+            'ENABLE_MONTHLY_CIRCUIT_BREAKER',
             'MONTHLY_LOSS_LIMIT_PCT', 'FUNDING_INTERVAL_HOURS',
             # Dynamic ATR-based TP/SL parameters
             'DYNAMIC_TPSL', 'ATR_TP_MULT', 'ATR_SL_MULT',
@@ -69,6 +70,7 @@ class BacktestEngine:
         self.max_balance = self.params['BASE_CAPITAL']
         self.max_drawdown = 0.0
         self.max_margin_usage = 0.0
+        self.skipped_orders = 0
         self.trades = []
 
         # Monthly balance snapshots
@@ -130,6 +132,7 @@ class BacktestEngine:
 
         # Check if we have enough balance
         if self.current_balance < (margin_usdt + fee):
+            self.skipped_orders += 1
             logger.info(
                 f"Skipping order for {symbol}: insufficient balance "
                 f"(need {margin_usdt + fee:.2f}, have {self.current_balance:.2f})"
@@ -310,8 +313,8 @@ class BacktestEngine:
         # Track current month for snapshots
         current_month = None
 
-        # Start from index 30 so signal checks always have enough warm-up candles
-        # for indicators plus rolling filters (e.g. BB, ATR, volume SMA).
+        # Start from index 30 so the first 30 candles are used only for warm-up.
+        # Trade decisions begin only after indicators and rolling filters are stable.
         for i in range(30, len(common_timestamps)):
             timestamp = common_timestamps.iloc[i]
 
@@ -503,7 +506,8 @@ class BacktestEngine:
                         if symbol not in self.cooldown_candle_count:
                             self.cooldown_candle_count[symbol] = 0
                         self.cooldown_candle_count[symbol] += 1
-                        if self.cooldown_candle_count.get(symbol, 0) > cooldown_min * 5:
+                        cooldown_reset_mult = self.params['CONSECUTIVE_LOSS_COOLDOWN_MULT']
+                        if self.cooldown_candle_count.get(symbol, 0) > cooldown_min * cooldown_reset_mult:
                             self.consecutive_losses[symbol] = 0
                             if symbol in self.cooldown_candle_count:
                                 del self.cooldown_candle_count[symbol]
@@ -598,6 +602,7 @@ class BacktestEngine:
         print(f"Win Rate: {win_rate:.2f}%")
         print(f"Max Drawdown (MDD): {self.max_drawdown*100:.2f}%")
         print(f"Max Margin Usage: {self.max_margin_usage:.2f} USDT")
+        print(f"Skipped Orders: {self.skipped_orders}")
         print("="*40)
         if self.max_drawdown > 0.99:
             print("⚠️ WARNING: Max Drawdown hit ~100%. Account would have been liquidated!")

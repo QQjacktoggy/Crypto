@@ -99,6 +99,7 @@ class Config:
     # --- Cooldown Settings ---
     COOLDOWN_CANDLES = 12   # Minimum candles (1 hour) before re-entry after SL
     MAX_CONSECUTIVE_LOSSES = 3  # Pause symbol after 3 consecutive losses
+    CONSECUTIVE_LOSS_COOLDOWN_MULT = 5
     ENABLE_MONTHLY_CIRCUIT_BREAKER = True
     MONTHLY_LOSS_LIMIT_PCT = -0.20
 
