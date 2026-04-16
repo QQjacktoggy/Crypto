@@ -164,6 +164,124 @@ class SignalEngine:
 
         return 'neutral'
 
+    def check_breakout_long_signal(self, symbol: str, df: pd.DataFrame) -> bool:
+        """
+        Breakout long for bullish regimes: close above upper Bollinger band with
+        trend/momentum alignment and stronger-than-average volume.
+        """
+        if df.empty or len(df) < 30:
+            return False
+
+        latest = df.iloc[-1]
+        bbu_col = [c for c in df.columns if c.startswith('BBU_')]
+        rsi_col = [c for c in df.columns if c.startswith('RSI_')]
+        macdh_col = [c for c in df.columns if c.startswith('MACDh_')]
+        ema_fast_col = [c for c in df.columns if c == f"EMA_{self.get_param('EMA_FAST')}"]
+        ema_slow_col = [c for c in df.columns if c == f"EMA_{self.get_param('EMA_SLOW')}"]
+
+        if not bbu_col or not rsi_col:
+            return False
+
+        close_val = latest['close']
+        bbu_val = latest[bbu_col[0]]
+        rsi_val = latest[rsi_col[0]]
+        if pd.isna(close_val) or pd.isna(bbu_val) or pd.isna(rsi_val):
+            return False
+
+        breakout_signal = close_val >= bbu_val * (1 + self.get_param('BREAKOUT_BUFFER_PCT'))
+        rsi_signal = self.get_param('BREAKOUT_LONG_RSI_MIN') <= rsi_val <= self.get_param('BREAKOUT_LONG_RSI_MAX')
+
+        ema_signal = True
+        if ema_fast_col and ema_slow_col:
+            ema_fast = latest[ema_fast_col[0]]
+            ema_slow = latest[ema_slow_col[0]]
+            if pd.isna(ema_fast) or pd.isna(ema_slow):
+                ema_signal = False
+            else:
+                ema_signal = ema_fast > ema_slow
+
+        macd_signal = True
+        if macdh_col:
+            macdh_val = latest[macdh_col[0]]
+            if pd.isna(macdh_val):
+                macd_signal = False
+            else:
+                macd_signal = macdh_val > 0
+
+        vol_filter = True
+        if 'vol_sma_20' in df.columns:
+            vol_sma = latest['vol_sma_20']
+            if not pd.isna(vol_sma) and vol_sma > 0:
+                vol_filter = latest['volume'] >= vol_sma * self.get_param('BREAKOUT_VOLUME_MULT')
+
+        if not (breakout_signal and rsi_signal and ema_signal and macd_signal and vol_filter):
+            return False
+
+        predicted_close = self.get_ai_prediction(symbol, df)
+        if predicted_close is not None:
+            return predicted_close > close_val
+
+        return True
+
+    def check_breakout_short_signal(self, symbol: str, df: pd.DataFrame) -> bool:
+        """
+        Breakout short for bearish regimes: close below lower Bollinger band with
+        trend/momentum alignment and stronger-than-average volume.
+        """
+        if df.empty or len(df) < 30:
+            return False
+
+        latest = df.iloc[-1]
+        bbl_col = [c for c in df.columns if c.startswith('BBL_')]
+        rsi_col = [c for c in df.columns if c.startswith('RSI_')]
+        macdh_col = [c for c in df.columns if c.startswith('MACDh_')]
+        ema_fast_col = [c for c in df.columns if c == f"EMA_{self.get_param('EMA_FAST')}"]
+        ema_slow_col = [c for c in df.columns if c == f"EMA_{self.get_param('EMA_SLOW')}"]
+
+        if not bbl_col or not rsi_col:
+            return False
+
+        close_val = latest['close']
+        bbl_val = latest[bbl_col[0]]
+        rsi_val = latest[rsi_col[0]]
+        if pd.isna(close_val) or pd.isna(bbl_val) or pd.isna(rsi_val):
+            return False
+
+        breakout_signal = close_val <= bbl_val * (1 - self.get_param('BREAKOUT_BUFFER_PCT'))
+        rsi_signal = self.get_param('BREAKOUT_SHORT_RSI_MIN') <= rsi_val <= self.get_param('BREAKOUT_SHORT_RSI_MAX')
+
+        ema_signal = True
+        if ema_fast_col and ema_slow_col:
+            ema_fast = latest[ema_fast_col[0]]
+            ema_slow = latest[ema_slow_col[0]]
+            if pd.isna(ema_fast) or pd.isna(ema_slow):
+                ema_signal = False
+            else:
+                ema_signal = ema_fast < ema_slow
+
+        macd_signal = True
+        if macdh_col:
+            macdh_val = latest[macdh_col[0]]
+            if pd.isna(macdh_val):
+                macd_signal = False
+            else:
+                macd_signal = macdh_val < 0
+
+        vol_filter = True
+        if 'vol_sma_20' in df.columns:
+            vol_sma = latest['vol_sma_20']
+            if not pd.isna(vol_sma) and vol_sma > 0:
+                vol_filter = latest['volume'] >= vol_sma * self.get_param('BREAKOUT_VOLUME_MULT')
+
+        if not (breakout_signal and rsi_signal and ema_signal and macd_signal and vol_filter):
+            return False
+
+        predicted_close = self.get_ai_prediction(symbol, df)
+        if predicted_close is not None:
+            return predicted_close < close_val
+
+        return True
+
     def check_tier_1_long_signal(self, symbol: str, df: pd.DataFrame, signal_mode: str = None) -> bool:
         """
         Checks if conditions for Tier 1 Long entry are met.

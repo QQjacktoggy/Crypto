@@ -95,6 +95,13 @@ class Config:
     RSI_LONG_ENTRY_LOW_VOL = 36
     RSI_SHORT_ENTRY_HIGH_VOL = 72
     RSI_SHORT_ENTRY_LOW_VOL = 64
+    ENABLE_REGIME_BREAKOUT = False
+    BREAKOUT_BUFFER_PCT = 0.002
+    BREAKOUT_VOLUME_MULT = 1.10
+    BREAKOUT_LONG_RSI_MIN = 52
+    BREAKOUT_LONG_RSI_MAX = 78
+    BREAKOUT_SHORT_RSI_MIN = 22
+    BREAKOUT_SHORT_RSI_MAX = 48
 
     # --- Cooldown Settings ---
     COOLDOWN_CANDLES = 12   # Minimum candles (1 hour) before re-entry after SL

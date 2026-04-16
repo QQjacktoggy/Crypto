@@ -33,6 +33,9 @@ class BacktestEngine:
             'HIGH_VOL_THRESHOLD', 'LOW_VOL_THRESHOLD',
             'RSI_LONG_ENTRY_HIGH_VOL', 'RSI_LONG_ENTRY_LOW_VOL',
             'RSI_SHORT_ENTRY_HIGH_VOL', 'RSI_SHORT_ENTRY_LOW_VOL',
+            'ENABLE_REGIME_BREAKOUT', 'BREAKOUT_BUFFER_PCT', 'BREAKOUT_VOLUME_MULT',
+            'BREAKOUT_LONG_RSI_MIN', 'BREAKOUT_LONG_RSI_MAX',
+            'BREAKOUT_SHORT_RSI_MIN', 'BREAKOUT_SHORT_RSI_MAX',
             'MAX_CONSECUTIVE_LOSSES', 'CONSECUTIVE_LOSS_COOLDOWN_MULT',
             'ENABLE_MONTHLY_CIRCUIT_BREAKER',
             'MONTHLY_LOSS_LIMIT_PCT', 'FUNDING_INTERVAL_HOURS',
@@ -527,11 +530,35 @@ class BacktestEngine:
 
                     can_go_long = current_regime in ['bull', 'neutral']
                     can_go_short = current_regime in ['bear', 'neutral']
+                    long_signal = False
+                    short_signal = False
 
-                    if can_go_long and self.signal_engine.check_tier_1_long_signal(symbol, df_slice, signal_mode):
+                    if self.params.get('ENABLE_REGIME_BREAKOUT', False):
+                        if current_regime == 'bull' and can_go_long:
+                            long_signal = (
+                                self.signal_engine.check_breakout_long_signal(symbol, df_slice) or
+                                self.signal_engine.check_tier_1_long_signal(symbol, df_slice, signal_mode)
+                            )
+                        elif current_regime == 'bear' and can_go_short:
+                            short_signal = (
+                                self.signal_engine.check_breakout_short_signal(symbol, df_slice) or
+                                self.signal_engine.check_tier_1_short_signal(symbol, df_slice, signal_mode)
+                            )
+                        else:
+                            if can_go_long:
+                                long_signal = self.signal_engine.check_tier_1_long_signal(symbol, df_slice, signal_mode)
+                            if not long_signal and can_go_short:
+                                short_signal = self.signal_engine.check_tier_1_short_signal(symbol, df_slice, signal_mode)
+                    else:
+                        if can_go_long:
+                            long_signal = self.signal_engine.check_tier_1_long_signal(symbol, df_slice, signal_mode)
+                        if not long_signal and can_go_short:
+                            short_signal = self.signal_engine.check_tier_1_short_signal(symbol, df_slice, signal_mode)
+
+                    if long_signal:
                         exec_price = current_price * 1.0005
                         self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'long', atr_value=atr_val)
-                    elif can_go_short and self.signal_engine.check_tier_1_short_signal(symbol, df_slice, signal_mode):
+                    elif short_signal:
                         exec_price = current_price * 0.9995
                         self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'short', atr_value=atr_val)
 
