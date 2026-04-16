@@ -3,6 +3,7 @@ import pandas as pd
 import time
 import logging
 import os
+from pandas.errors import EmptyDataError
 from src.config import config
 from src.signal_logic import SignalEngine
 
@@ -92,16 +93,22 @@ class BacktestEngine:
 
         # Data Cache
         self.data_frames = {}
+        self.last_run_had_data = False
 
     def fetch_historical_data(self, symbol, timeframe=config.TIMEFRAME, limit_fetch_days=None):
         days_to_fetch = limit_fetch_days if limit_fetch_days else self.days
         data_path = f"data/{symbol.replace('/', '_')}_{days_to_fetch}d_{timeframe}.csv"
 
         if os.path.exists(data_path):
-            logger.info(f"Loading cached data from {data_path}")
-            df = pd.read_csv(data_path)
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-            return df
+            try:
+                logger.info(f"Loading cached data from {data_path}")
+                df = pd.read_csv(data_path)
+                if not df.empty and 'timestamp' in df.columns:
+                    df['timestamp'] = pd.to_datetime(df['timestamp'])
+                    return df
+                logger.warning(f"Cached data invalid or empty at {data_path}, refetching.")
+            except EmptyDataError:
+                logger.warning(f"Cached data file empty at {data_path}, refetching.")
 
         logger.info(f"Fetching {days_to_fetch} days of data for {symbol} ({timeframe})...")
         end_time = self.exchange.milliseconds()
@@ -122,12 +129,16 @@ class BacktestEngine:
                 logger.error(f"Error fetching data for {symbol}: {e}")
                 break
 
+        if not all_ohlcv:
+            return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+
         df = pd.DataFrame(all_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.drop_duplicates(subset=['timestamp'], inplace=True)
 
-        os.makedirs(os.path.dirname(data_path), exist_ok=True)
-        df.to_csv(data_path, index=False)
+        if not df.empty:
+            os.makedirs(os.path.dirname(data_path), exist_ok=True)
+            df.to_csv(data_path, index=False)
         return df
 
     def get_avg_price(self, symbol):
@@ -274,6 +285,7 @@ class BacktestEngine:
                 self.current_balance += funding_cost * 0.5  # Partial benefit (conservative)
 
     def run(self):
+        self.last_run_had_data = False
         logger.info("Loading data and calculating indicators for all symbols...")
         indicators = {}
         indicators_hourly = {}
@@ -309,7 +321,8 @@ class BacktestEngine:
 
         if not indicators:
             logger.error("No data available to backtest.")
-            return
+            return False
+        self.last_run_had_data = True
 
         logger.info("Fetching and calculating Daily Trend Filter (BTC SMA)...")
         trend_days = self.days + 200
@@ -655,6 +668,7 @@ class BacktestEngine:
             self.monthly_balances[str(current_month)] = self.current_balance
 
         self.print_report()
+        return True
 
     def get_monthly_pnl_report(self):
         """Returns a list of dicts with monthly performance data."""

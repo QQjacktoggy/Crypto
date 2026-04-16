@@ -247,7 +247,8 @@ def run_scenario(iteration_num, scenario):
         full_params.update(scenario['params'])
 
         engine = BacktestEngine(days=scenario['days'], param_overrides=full_params)
-        engine.run()
+        if not engine.run():
+            raise RuntimeError(f"No historical data available for {scenario['days']}d window")
 
         closed_trades = [t for t in engine.trades if t['type'] == 'close']
         total_pnl = sum(t['pnl'] for t in closed_trades)
@@ -302,8 +303,9 @@ def save_results(results, filename=None):
 
 
 def main():
+    total_scenarios = len(SCENARIOS)
     print("=" * 72)
-    print("🚀 PHASE 10 MULTI-YEAR ROBUSTNESS OPTIMIZER (10 SCENARIOS)")
+    print(f"🚀 PHASE 10 MULTI-YEAR ROBUSTNESS OPTIMIZER ({total_scenarios} SCENARIOS)")
     print("=" * 72)
     print(f"Initial Capital: {config.BASE_CAPITAL} USDT")
     print("Windows: 730d and 1095d")
@@ -311,15 +313,15 @@ def main():
 
     results = []
     for i, scenario in enumerate(SCENARIOS, start=1):
-        sys.stdout.write(f"\r⏳ Running scenario {i}/10...")
+        sys.stdout.write(f"\r⏳ Running scenario {i}/{total_scenarios}...")
         sys.stdout.flush()
         result = run_scenario(i, scenario)
         results.append(result)
         if 'error' in result:
-            sys.stdout.write(f"\r❌ Scenario {i}/10 | {scenario['label']} | ERROR: {result['error']}\n")
+            sys.stdout.write(f"\r❌ Scenario {i}/{total_scenarios} | {scenario['label']} | ERROR: {result['error']}\n")
         else:
             sys.stdout.write(
-                f"\r✅ Scenario {i}/10 | {scenario['label']} | PnL: {result['total_pnl']:+.2f} | "
+                f"\r✅ Scenario {i}/{total_scenarios} | {scenario['label']} | PnL: {result['total_pnl']:+.2f} | "
                 f"DD: {result['max_drawdown']:.1f}% | Trades: {result['total_trades']}\n"
             )
 

@@ -1,0 +1,45 @@
+Phase 9 Advanced Trend Filter Optimization Report
+Generated: 2026-04-16 11:11:02
+Goal: yearly profit >= 400 USDT on 150.0 USDT capital
+========================================================================
+
+Iteration #1
+  PnL=+41.21 | Final=191.58 | WR=70.8% | DD=65.2% | Trades=72 | AvgM=+3.17 | BestM=+44.52
+  AdvFilter=False ADX=0/0 Slope=0/0.0000 Struct=0 Donchian=0
+
+Iteration #2
+  PnL=+41.21 | Final=191.58 | WR=70.8% | DD=65.2% | Trades=72 | AvgM=+3.17 | BestM=+44.52
+  AdvFilter=True ADX=14/18 Slope=3/0.0010 Struct=3 Donchian=24
+
+Iteration #3
+  PnL=+41.21 | Final=191.58 | WR=70.8% | DD=65.2% | Trades=72 | AvgM=+3.17 | BestM=+44.52
+  AdvFilter=True ADX=14/22 Slope=4/0.0015 Struct=3 Donchian=20
+
+Iteration #4
+  PnL=-23.96 | Final=126.37 | WR=57.1% | DD=66.6% | Trades=56 | AvgM=-1.84 | BestM=+33.27
+  AdvFilter=True ADX=14/25 Slope=4/0.0020 Struct=4 Donchian=30
+
+Iteration #5
+  PnL=+1.43 | Final=151.86 | WR=65.5% | DD=67.5% | Trades=58 | AvgM=+0.11 | BestM=+23.41
+  AdvFilter=True ADX=10/18 Slope=3/0.0010 Struct=3 Donchian=20
+
+Iteration #6
+  PnL=-38.15 | Final=112.17 | WR=54.5% | DD=69.0% | Trades=55 | AvgM=-2.93 | BestM=+24.53
+  AdvFilter=True ADX=14/20 Slope=3/0.0015 Struct=3 Donchian=20
+
+Iteration #7
+  PnL=+41.21 | Final=191.58 | WR=70.8% | DD=65.2% | Trades=72 | AvgM=+3.17 | BestM=+44.52
+  AdvFilter=True ADX=14/16 Slope=2/0.0008 Struct=3 Donchian=55
+
+Iteration #8
+  PnL=-6.44 | Final=143.96 | WR=58.3% | DD=67.4% | Trades=60 | AvgM=-0.50 | BestM=+30.89
+  AdvFilter=True ADX=18/24 Slope=4/0.0022 Struct=4 Donchian=30
+
+Iteration #9
+  PnL=-9.42 | Final=140.86 | WR=60.4% | DD=62.4% | Trades=53 | AvgM=-0.72 | BestM=+18.71
+  AdvFilter=True ADX=10/16 Slope=2/0.0008 Struct=3 Donchian=18
+
+Iteration #10
+  PnL=+41.21 | Final=191.58 | WR=70.8% | DD=65.2% | Trades=72 | AvgM=+3.17 | BestM=+44.52
+  AdvFilter=True ADX=18/28 Slope=5/0.0025 Struct=4 Donchian=40
+

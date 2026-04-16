@@ -1,0 +1,29 @@
+Phase 10 Multi-Year Robustness Report
+Generated: 2026-04-16 11:11:51
+Goal: robustness on 730d and 1095d windows using 150.0 USDT capital
+========================================================================
+
+Iteration #1 | Control-2Y
+  ERROR: No historical data available for 730d window
+
+Iteration #2 | Control-3Y
+  ERROR: No historical data available for 1095d window
+
+Iteration #3 | AdvA-2Y
+  ERROR: No historical data available for 730d window
+
+Iteration #4 | AdvA-3Y
+  ERROR: No historical data available for 1095d window
+
+Iteration #5 | AdvB-2Y
+  ERROR: No historical data available for 730d window
+
+Iteration #6 | AdvB-3Y
+  ERROR: No historical data available for 1095d window
+
+Iteration #7 | AdvC-2Y
+  ERROR: No historical data available for 730d window
+
+Iteration #8 | AdvC-3Y
+  ERROR: No historical data available for 1095d window
+

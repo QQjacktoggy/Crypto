@@ -265,7 +265,8 @@ def run_single_iteration(iteration_num, params, days=365):
         full_params.update(params)
 
         engine = BacktestEngine(days=days, param_overrides=full_params)
-        engine.run()
+        if not engine.run():
+            raise RuntimeError(f"No historical data available for {days}d window")
 
         monthly_data = engine.get_monthly_pnl_report()
         closed_trades = [t for t in engine.trades if t['type'] == 'close']
