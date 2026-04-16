@@ -9,6 +9,19 @@ This guide provides instructions on how to deploy the Crypto Quant Bot to a Goog
 
 ## Setup Instructions
 
+### 0. Set up SSH Access to Your GCP VM (Required First)
+
+See [GCP-SSH-SETUP.md](GCP-SSH-SETUP.md) for detailed instructions on:
+- Installing `gcloud` CLI
+- Configuring SSH keys
+- Testing SSH connection
+- Running remote verification script
+
+Quick start (if gcloud is already configured):
+```bash
+gcloud compute ssh YOUR_VM_NAME
+```
+
 ### 1. SSH into your VM and install Docker
 ```bash
 sudo apt update && sudo apt upgrade -y
@@ -106,6 +119,28 @@ sudo systemctl start quantbot
 sudo systemctl status quantbot
 ```
 
+## Automated Remote Verification
+
+If you want to run the entire verification remotely from your local machine:
+
+```bash
+# Make the script executable
+chmod +x deploy/gcp-verify.sh
+
+# Run verification on remote GCP VM
+./deploy/gcp-verify.sh YOUR_GCP_IP
+
+# Or with testnet
+./deploy/gcp-verify.sh YOUR_GCP_IP testnet
+```
+
+This script will:
+1. Test SSH connection to your VM
+2. Clone/update the repository
+3. Set up Python environment
+4. Run environment verification
+5. Report any issues
+
 ## Logs
 To view docker logs:
 ```bash
@@ -116,3 +151,17 @@ To view systemd logs:
 ```bash
 journalctl -u quantbot -f
 ```
+
+## Automated VM Setup
+
+When creating a new GCP VM, you can use the cloud-init script:
+```bash
+gcloud compute instances create crypto-bot \
+  --zone=us-central1-a \
+  --machine-type=e2-micro \
+  --image-family=ubuntu-2204-lts \
+  --image-project=ubuntu-os-cloud \
+  --metadata-from-file startup-script=deploy/gcp-cloud-init.sh
+```
+
+See [GCP-SSH-SETUP.md](GCP-SSH-SETUP.md) for more details.
