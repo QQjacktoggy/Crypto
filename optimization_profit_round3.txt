@@ -1,0 +1,55 @@
+Round 3 Profit-Focused Optimization Report
+Generated: 2026-04-16 09:34:32
+Goal: yearly profit >= 400 USDT on 150.0 USDT capital
+========================================================================
+
+Iteration #1
+  PnL=-117.77 | Final=27.12 | WR=61.7% | DD=92.0% | AvgM=-9.06 | BestM=+53.63
+  Lev=5x Margin=0.055 Mode=classic RSI=30/70 BBbuf=0.003 Vol=0.55
+  ATR TP/SL=3.0/1.5 DynTier=True T2/T3 ATR mult=1.6/2.8 Breaker=False
+
+Iteration #2
+  PnL=-144.42 | Final=4.72 | WR=57.8% | DD=98.6% | AvgM=-11.11 | BestM=+56.87
+  Lev=7x Margin=0.070 Mode=classic RSI=32/68 BBbuf=0.005 Vol=0.50
+  ATR TP/SL=3.2/1.5 DynTier=True T2/T3 ATR mult=1.5/2.5 Breaker=False
+
+Iteration #3
+  PnL=-151.11 | Final=0.12 | WR=58.4% | DD=100.0% | AvgM=-11.62 | BestM=+7.22
+  Lev=10x Margin=0.100 Mode=classic RSI=34/66 BBbuf=0.008 Vol=0.40
+  ATR TP/SL=3.5/1.6 DynTier=True T2/T3 ATR mult=1.4/2.2 Breaker=False
+
+Iteration #4
+  PnL=-151.13 | Final=0.00 | WR=54.1% | DD=100.0% | AvgM=-11.63 | BestM=+0.07
+  Lev=12x Margin=0.120 Mode=classic RSI=35/65 BBbuf=0.010 Vol=0.35
+  ATR TP/SL=4.0/1.8 DynTier=True T2/T3 ATR mult=1.2/2.0 Breaker=False
+
+Iteration #5
+  PnL=-147.62 | Final=2.03 | WR=57.0% | DD=99.3% | AvgM=-11.36 | BestM=+3.38
+  Lev=7x Margin=0.080 Mode=multi RSI=35/65 BBbuf=0.004 Vol=0.50
+  ATR TP/SL=2.8/1.2 DynTier=True T2/T3 ATR mult=1.4/2.4 Breaker=False
+
+Iteration #6
+  PnL=-150.56 | Final=0.02 | WR=50.9% | DD=100.0% | AvgM=-11.58 | BestM=+0.02
+  Lev=10x Margin=0.090 Mode=multi RSI=36/64 BBbuf=0.006 Vol=0.45
+  ATR TP/SL=3.2/1.2 DynTier=True T2/T3 ATR mult=1.2/2.0 Breaker=False
+
+Iteration #7
+  PnL=+41.21 | Final=191.58 | WR=70.8% | DD=65.2% | AvgM=+3.17 | BestM=+44.52
+  Lev=7x Margin=0.090 Mode=classic RSI=33/67 BBbuf=0.006 Vol=0.45
+  ATR TP/SL=3.0/1.4 DynTier=True T2/T3 ATR mult=1.1/1.8 Breaker=True
+
+Iteration #8
+  PnL=-150.44 | Final=0.00 | WR=45.5% | DD=100.0% | AvgM=-11.57 | BestM=-0.00
+  Lev=15x Margin=0.120 Mode=classic RSI=36/64 BBbuf=0.012 Vol=0.30
+  ATR TP/SL=4.5/1.5 DynTier=True T2/T3 ATR mult=1.0/1.6 Breaker=False
+
+Iteration #9
+  PnL=-150.50 | Final=0.00 | WR=48.4% | DD=100.0% | AvgM=-11.58 | BestM=+0.00
+  Lev=12x Margin=0.100 Mode=multi RSI=38/62 BBbuf=0.008 Vol=0.35
+  ATR TP/SL=3.8/1.3 DynTier=True T2/T3 ATR mult=1.0/1.6 Breaker=False
+
+Iteration #10
+  PnL=-150.65 | Final=0.00 | WR=45.4% | DD=100.0% | AvgM=-11.59 | BestM=-0.00
+  Lev=20x Margin=0.150 Mode=classic RSI=40/60 BBbuf=0.015 Vol=0.25
+  ATR TP/SL=5.0/1.8 DynTier=True T2/T3 ATR mult=0.9/1.4 Breaker=False
+

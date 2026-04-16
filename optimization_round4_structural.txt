@@ -1,0 +1,55 @@
+Round 4 Structural Optimization Report
+Generated: 2026-04-16 09:51:02
+Goal: yearly profit >= 400 USDT on 150.0 USDT capital
+========================================================================
+
+Iteration #1
+  PnL=+41.21 | Final=191.58 | WR=70.8% | DD=65.2% | Trades=72 | AvgM=+3.17 | BestM=+44.52
+  Lev=7x Margin=0.090 Mode=classic BBbuf=0.006 Vol=0.45
+  VolAdapt=False High/Low=0.00/0.00 DCAgate=False T2/T3 ATR gate=0.00/0.00
+
+Iteration #2
+  PnL=-20.68 | Final=129.62 | WR=59.0% | DD=66.2% | Trades=61 | AvgM=-1.59 | BestM=+24.65
+  Lev=7x Margin=0.090 Mode=classic BBbuf=0.006 Vol=0.45
+  VolAdapt=True High/Low=1.20/0.85 DCAgate=True T2/T3 ATR gate=1.90/1.60
+
+Iteration #3
+  PnL=-25.35 | Final=124.95 | WR=57.6% | DD=70.4% | Trades=59 | AvgM=-1.95 | BestM=+26.40
+  Lev=7x Margin=0.085 Mode=classic BBbuf=0.007 Vol=0.42
+  VolAdapt=True High/Low=1.25/0.90 DCAgate=True T2/T3 ATR gate=1.80/1.50
+
+Iteration #4
+  PnL=-17.71 | Final=132.58 | WR=53.6% | DD=59.8% | Trades=56 | AvgM=-1.36 | BestM=+21.12
+  Lev=7x Margin=0.080 Mode=classic BBbuf=0.008 Vol=0.40
+  VolAdapt=True High/Low=1.15/0.85 DCAgate=True T2/T3 ATR gate=1.70/1.40
+
+Iteration #5
+  PnL=+26.50 | Final=176.92 | WR=68.9% | DD=66.0% | Trades=61 | AvgM=+2.04 | BestM=+23.19
+  Lev=5x Margin=0.085 Mode=classic BBbuf=0.008 Vol=0.42
+  VolAdapt=True High/Low=1.25/0.85 DCAgate=True T2/T3 ATR gate=2.00/1.70
+
+Iteration #6
+  PnL=-14.74 | Final=135.63 | WR=56.7% | DD=70.0% | Trades=60 | AvgM=-1.13 | BestM=+28.15
+  Lev=7x Margin=0.090 Mode=multi BBbuf=0.007 Vol=0.40
+  VolAdapt=True High/Low=1.25/0.90 DCAgate=True T2/T3 ATR gate=1.90/1.60
+
+Iteration #7
+  PnL=-8.48 | Final=141.97 | WR=58.7% | DD=71.4% | Trades=63 | AvgM=-0.65 | BestM=+29.20
+  Lev=7x Margin=0.095 Mode=classic BBbuf=0.008 Vol=0.38
+  VolAdapt=True High/Low=1.30/0.90 DCAgate=True T2/T3 ATR gate=1.80/1.50
+
+Iteration #8
+  PnL=-12.84 | Final=137.37 | WR=57.1% | DD=57.3% | Trades=56 | AvgM=-0.99 | BestM=+21.36
+  Lev=7x Margin=0.075 Mode=classic BBbuf=0.010 Vol=0.38
+  VolAdapt=True High/Low=1.15/0.80 DCAgate=True T2/T3 ATR gate=1.70/1.40
+
+Iteration #9
+  PnL=-30.58 | Final=119.76 | WR=57.4% | DD=65.8% | Trades=61 | AvgM=-2.35 | BestM=+26.58
+  Lev=7x Margin=0.090 Mode=classic BBbuf=0.006 Vol=0.42
+  VolAdapt=True High/Low=1.35/0.95 DCAgate=True T2/T3 ATR gate=2.00/1.70
+
+Iteration #10
+  PnL=-11.00 | Final=139.29 | WR=62.0% | DD=59.6% | Trades=50 | AvgM=-0.85 | BestM=+25.43
+  Lev=7x Margin=0.090 Mode=classic BBbuf=0.006 Vol=0.45
+  VolAdapt=True High/Low=1.10/0.75 DCAgate=True T2/T3 ATR gate=1.60/1.30
+

@@ -3,6 +3,7 @@ import pandas as pd
 import time
 import logging
 import os
+from pandas.errors import EmptyDataError
 from src.config import config
 from src.signal_logic import SignalEngine
 
@@ -10,36 +11,105 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class BacktestEngine:
-    def __init__(self, symbols=None, days=90):
+    def __init__(self, symbols=None, days=90, param_overrides=None):
+        """
+        param_overrides: dict of config attribute overrides for optimization runs.
+        """
         self.symbols = symbols if symbols else config.SYMBOLS
         self.days = days
         self.exchange = ccxt.okx({'enableRateLimit': True})
-        self.signal_engine = SignalEngine()
+
+        # Apply parameter overrides for optimization
+        self.params = {}
+        param_keys = [
+            'RSI_LONG_ENTRY', 'RSI_SHORT_ENTRY', 'TP_MARGIN_ROI', 'SL_MARGIN_ROI',
+            'TP_NET_PROFIT', 'SL_MAX_LOSS',
+            'SL_GLOBAL_CAP_PCT', 'TIER_MARGIN_PCT', 'LEVERAGE', 'MAX_ACTIVE_TRADES',
+            'TIER_2_DEV_PCT', 'TIER_3_DEV_PCT', 'TRAILING_TP_ACTIVATE_ROI',
+            'TRAILING_TP_CALLBACK_ROI', 'FUNDING_RATE', 'COOLDOWN_CANDLES',
+            'TIER_1_MARGIN', 'EMA_FAST', 'EMA_SLOW', 'MACD_FAST', 'MACD_SLOW', 'MACD_SIGNAL',
+            'MACD_LONG_RSI_MAX', 'MACD_SHORT_RSI_MIN', 'EMA_LONG_RSI_MAX', 'EMA_SHORT_RSI_MIN',
+            'TREND_SMA_LENGTH', 'FEE_RATE', 'COMPOUND_MODE', 'BASE_CAPITAL',
+            'SIGNAL_MODE', 'BB_ENTRY_BUFFER_PCT', 'VOLUME_FILTER_MULT',
+            'VOLATILITY_ADAPTIVE_ENTRY', 'ATR_VOL_LOOKBACK',
+            'HIGH_VOL_THRESHOLD', 'LOW_VOL_THRESHOLD',
+            'RSI_LONG_ENTRY_HIGH_VOL', 'RSI_LONG_ENTRY_LOW_VOL',
+            'RSI_SHORT_ENTRY_HIGH_VOL', 'RSI_SHORT_ENTRY_LOW_VOL',
+            'ENABLE_REGIME_BREAKOUT', 'BREAKOUT_BUFFER_PCT', 'BREAKOUT_VOLUME_MULT',
+            'BREAKOUT_LONG_RSI_MIN', 'BREAKOUT_LONG_RSI_MAX',
+            'BREAKOUT_SHORT_RSI_MIN', 'BREAKOUT_SHORT_RSI_MAX',
+            'ENABLE_DONCHIAN_BREAKOUT', 'DONCHIAN_LENGTH', 'DONCHIAN_BREAKOUT_BUFFER_PCT',
+            'DONCHIAN_VOLUME_MULT', 'DONCHIAN_LONG_RSI_MIN', 'DONCHIAN_LONG_RSI_MAX',
+            'DONCHIAN_SHORT_RSI_MIN', 'DONCHIAN_SHORT_RSI_MAX',
+            'ENABLE_1H_TREND_FILTER', 'HOURLY_EMA_FAST', 'HOURLY_EMA_SLOW',
+            'ENABLE_TREND_PYRAMIDING', 'TREND_PYRAMID_MAX_ADDS',
+            'TREND_PYRAMID_TRIGGER_ROI', 'TREND_PYRAMID_MIN_PULLBACK',
+            'ENABLE_TREND_EXIT', 'TREND_EXIT_ON_HOURLY_FLIP', 'TREND_EXIT_USE_DONCHIAN_MID',
+            'ENABLE_ADVANCED_TREND_FILTER', 'ADVANCED_TREND_ADX_LENGTH',
+            'ADVANCED_TREND_ADX_THRESHOLD', 'ADVANCED_TREND_SLOPE_LOOKBACK',
+            'ADVANCED_TREND_SLOPE_MIN', 'ADVANCED_TREND_STRUCTURE_BARS',
+            'MAX_CONSECUTIVE_LOSSES', 'CONSECUTIVE_LOSS_COOLDOWN_MULT',
+            'ENABLE_MONTHLY_CIRCUIT_BREAKER',
+            'MONTHLY_LOSS_LIMIT_PCT', 'FUNDING_INTERVAL_HOURS',
+            # Dynamic ATR-based TP/SL parameters
+            'DYNAMIC_TPSL', 'ATR_TP_MULT', 'ATR_SL_MULT',
+            'ATR_TP_MIN_ROI', 'ATR_TP_MAX_ROI', 'ATR_SL_MIN_ROI', 'ATR_SL_MAX_ROI',
+            'DYNAMIC_TIER_DEVIATIONS', 'TIER_2_ATR_DEV_MULT', 'TIER_3_ATR_DEV_MULT',
+            'MIN_TIER_DEV_PCT', 'MOMENTUM_GATED_DCA',
+            'TIER_2_MAX_ATR_RATIO', 'TIER_3_MAX_ATR_RATIO',
+            'TIER_2_LONG_RSI_MAX', 'TIER_2_SHORT_RSI_MIN',
+            'TIER_3_LONG_RSI_RECOVERY', 'TIER_3_SHORT_RSI_RECOVERY',
+            'ENABLE_ATR_SPIKE_BLOCK', 'ATR_SPIKE_BLOCK_THRESHOLD',
+        ]
+        for key in param_keys:
+            if param_overrides and key in param_overrides:
+                self.params[key] = param_overrides[key]
+            else:
+                self.params[key] = getattr(config, key)
+
+        self.signal_engine = SignalEngine(self.params)
 
         # State
         self.positions = {}
         self.cooldown_symbols = {}
+        self.cooldown_candle_count = {}  # Track candles since SL for each symbol
+        self.consecutive_losses = {}     # Track consecutive losses per symbol
+        self.trailing_peaks = {}         # Track peak PnL ROI for trailing TP
+
+        # Monthly loss circuit breaker
+        self.month_start_balance = self.params['BASE_CAPITAL']
+        self.monthly_circuit_breaker_active = False
 
         # Performance Tracking
-        self.initial_balance = config.BASE_CAPITAL
-        self.current_balance = config.BASE_CAPITAL
-        self.max_balance = config.BASE_CAPITAL
+        self.initial_balance = self.params['BASE_CAPITAL']
+        self.current_balance = self.params['BASE_CAPITAL']
+        self.max_balance = self.params['BASE_CAPITAL']
         self.max_drawdown = 0.0
         self.max_margin_usage = 0.0
+        self.skipped_orders = 0
         self.trades = []
+
+        # Monthly balance snapshots
+        self.monthly_balances = {}
 
         # Data Cache
         self.data_frames = {}
+        self.last_run_had_data = False
 
     def fetch_historical_data(self, symbol, timeframe=config.TIMEFRAME, limit_fetch_days=None):
         days_to_fetch = limit_fetch_days if limit_fetch_days else self.days
         data_path = f"data/{symbol.replace('/', '_')}_{days_to_fetch}d_{timeframe}.csv"
 
         if os.path.exists(data_path):
-            logger.info(f"Loading cached data from {data_path}")
-            df = pd.read_csv(data_path)
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-            return df
+            try:
+                logger.info(f"Loading cached data from {data_path}")
+                df = pd.read_csv(data_path)
+                if not df.empty and 'timestamp' in df.columns:
+                    df['timestamp'] = pd.to_datetime(df['timestamp'])
+                    return df
+                logger.warning(f"Cached data invalid or empty at {data_path}, refetching.")
+            except EmptyDataError:
+                logger.warning(f"Cached data file empty at {data_path}, refetching.")
 
         logger.info(f"Fetching {days_to_fetch} days of data for {symbol} ({timeframe})...")
         end_time = self.exchange.milliseconds()
@@ -55,17 +125,21 @@ class BacktestEngine:
                     break
                 all_ohlcv.extend(ohlcv)
                 current_time = ohlcv[-1][0] + 1
-                time.sleep(0.2) # Rate limit
+                time.sleep(0.2)
             except Exception as e:
                 logger.error(f"Error fetching data for {symbol}: {e}")
                 break
+
+        if not all_ohlcv:
+            return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
 
         df = pd.DataFrame(all_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.drop_duplicates(subset=['timestamp'], inplace=True)
 
-        os.makedirs(os.path.dirname(data_path), exist_ok=True)
-        df.to_csv(data_path, index=False)
+        if not df.empty:
+            os.makedirs(os.path.dirname(data_path), exist_ok=True)
+            df.to_csv(data_path, index=False)
         return df
 
     def get_avg_price(self, symbol):
@@ -74,15 +148,30 @@ class BacktestEngine:
             return 0.0
         return pos['notional_usdt'] / pos['amount']
 
-    def execute_order(self, symbol, margin_usdt, price, timestamp, tier, direction):
-        position_value_usdt = margin_usdt * config.LEVERAGE
+    def execute_order(self, symbol, margin_usdt, price, timestamp, tier, direction, atr_value=None, entry_style=None):
+        leverage = self.params['LEVERAGE']
+        fee_rate = self.params['FEE_RATE']
+
+        position_value_usdt = margin_usdt * leverage
         amount = position_value_usdt / price
-        fee = position_value_usdt * config.FEE_RATE
+        fee = position_value_usdt * fee_rate
+
+        # Check if we have enough balance
+        if self.current_balance < (margin_usdt + fee):
+            self.skipped_orders += 1
+            logger.info(
+                f"Skipping order for {symbol}: insufficient balance "
+                f"(need {margin_usdt + fee:.2f}, have {self.current_balance:.2f})"
+            )
+            return  # Skip order if insufficient balance
 
         if symbol not in self.positions:
             self.positions[symbol] = {
                 'tier': 0, 'direction': direction, 'amount': 0.0,
-                'margin_usdt': 0.0, 'notional_usdt': 0.0, 'fees_usdt': 0.0
+                'margin_usdt': 0.0, 'notional_usdt': 0.0, 'fees_usdt': 0.0,
+                'open_time': timestamp, 'entry_atr': atr_value,
+                'entry_style': entry_style or 'mean_reversion',
+                'last_entry_price': price,
             }
 
         pos = self.positions[symbol]
@@ -91,6 +180,9 @@ class BacktestEngine:
         pos['margin_usdt'] += margin_usdt
         pos['notional_usdt'] += position_value_usdt
         pos['fees_usdt'] += fee
+        pos['last_entry_price'] = price
+        if pos.get('entry_style') is None:
+            pos['entry_style'] = entry_style or 'mean_reversion'
 
         current_margin = sum(p['margin_usdt'] for p in self.positions.values())
         if current_margin > self.max_margin_usage:
@@ -104,12 +196,13 @@ class BacktestEngine:
             'price': price, 'amount': amount, 'margin': margin_usdt, 'notional': position_value_usdt, 'fee': fee
         })
 
-    def close_position(self, symbol, price, timestamp, is_tp=True):
+    def close_position(self, symbol, price, timestamp, is_tp=True, reason_detail=''):
         pos = self.positions.get(symbol)
         if not pos: return
 
+        fee_rate = self.params['FEE_RATE']
         current_notional = pos['amount'] * price
-        fee = current_notional * config.FEE_RATE
+        fee = current_notional * fee_rate
 
         if pos['direction'] == 'long':
             gross_pnl = current_notional - pos['notional_usdt']
@@ -123,27 +216,46 @@ class BacktestEngine:
 
         if self.current_balance > self.max_balance:
             self.max_balance = self.current_balance
-        drawdown = (self.max_balance - self.current_balance) / self.max_balance
+        drawdown = (self.max_balance - self.current_balance) / self.max_balance if self.max_balance > 0 else 0
         if drawdown > self.max_drawdown:
             self.max_drawdown = drawdown
 
+        close_reason = 'TP' if is_tp else 'SL'
+        if reason_detail:
+            close_reason = reason_detail
+
         self.trades.append({
-            'time': timestamp, 'symbol': symbol, 'type': 'close', 'reason': 'TP' if is_tp else 'SL',
+            'time': timestamp, 'symbol': symbol, 'type': 'close', 'reason': close_reason,
             'price': price, 'amount': pos['amount'], 'fee': fee, 'pnl': pnl
         })
 
+        direction = pos['direction']
         del self.positions[symbol]
 
+        # Clear trailing peak
+        if symbol in self.trailing_peaks:
+            del self.trailing_peaks[symbol]
+
         if not is_tp:
-            self.cooldown_symbols[symbol] = pos['direction']
+            self.cooldown_symbols[symbol] = direction
+            self.cooldown_candle_count[symbol] = 0
+
+            # Track consecutive losses
+            if symbol not in self.consecutive_losses:
+                self.consecutive_losses[symbol] = 0
+            self.consecutive_losses[symbol] += 1
+        else:
+            # Reset consecutive losses on win
+            self.consecutive_losses[symbol] = 0
 
     def calculate_pnl(self, symbol, current_price):
         pos = self.positions.get(symbol)
         if not pos or pos['amount'] == 0:
             return 0.0
 
+        fee_rate = self.params['FEE_RATE']
         current_notional = pos['amount'] * current_price
-        estimated_exit_fee = current_notional * config.FEE_RATE
+        estimated_exit_fee = current_notional * fee_rate
 
         if pos['direction'] == 'long':
             gross_pnl = current_notional - pos['notional_usdt']
@@ -153,35 +265,72 @@ class BacktestEngine:
         net_pnl = gross_pnl - pos['fees_usdt'] - estimated_exit_fee
         return net_pnl
 
+    def apply_funding_rate(self, timestamp):
+        """
+        Simulate funding rate charges every 8 hours.
+        In real markets, longs pay shorts when funding is positive (most common).
+        """
+        funding_rate = self.params['FUNDING_RATE']
+        if funding_rate == 0:
+            return
+
+        for symbol, pos in list(self.positions.items()):
+            # Funding applies to notional value
+            funding_cost = pos['notional_usdt'] * funding_rate
+            if pos['direction'] == 'long':
+                # Longs typically pay funding
+                self.current_balance -= funding_cost
+                pos['fees_usdt'] += funding_cost
+            else:
+                # Shorts typically receive funding
+                self.current_balance += funding_cost * 0.5  # Partial benefit (conservative)
+
     def run(self):
+        self.last_run_had_data = False
         logger.info("Loading data and calculating indicators for all symbols...")
-        # Dictionary to store indicators pre-calculated for speed
         indicators = {}
+        indicators_hourly = {}
         min_len = float('inf')
 
         for symbol in self.symbols:
-            df = self.fetch_historical_data(symbol)
-            if not df.empty:
-                df = self.signal_engine.calculate_indicators(df)
-                # align everything by timestamp index
+            raw_df = self.fetch_historical_data(symbol)
+            if not raw_df.empty:
+                df = self.signal_engine.calculate_indicators(raw_df.copy())
                 df.set_index('timestamp', inplace=True)
                 indicators[symbol] = df
                 if len(df) < min_len:
                     min_len = len(df)
 
+                df_hourly = (
+                    raw_df.copy()
+                    .set_index('timestamp')
+                    .resample('1h')
+                    .agg({
+                        'open': 'first',
+                        'high': 'max',
+                        'low': 'min',
+                        'close': 'last',
+                        'volume': 'sum',
+                    })
+                    .dropna()
+                    .reset_index()
+                )
+                if not df_hourly.empty:
+                    df_hourly = self.signal_engine.calculate_hourly_indicators(df_hourly)
+                    df_hourly.set_index('timestamp', inplace=True)
+                    indicators_hourly[symbol] = df_hourly.shift(1)
+
         if not indicators:
             logger.error("No data available to backtest.")
-            return
+            return False
+        self.last_run_had_data = True
 
-        logger.info("Fetching and calculating Daily Trend Filter (BTC 200 SMA)...")
-        # Fetch 200 extra days so we have enough data to calculate the 200 SMA right from the start of our backtest period
+        logger.info("Fetching and calculating Daily Trend Filter (BTC SMA)...")
         trend_days = self.days + 200
         df_daily = self.fetch_historical_data('BTC/USDT:USDT', timeframe='1d', limit_fetch_days=trend_days)
         if not df_daily.empty:
             df_daily = self.signal_engine.calculate_daily_indicators(df_daily)
             df_daily.set_index('timestamp', inplace=True)
-            # Forward fill the daily regime so we can look it up at any 5m timestamp easily
-            # We shift the daily data by 1 so we only use yesterday's close to determine today's regime (avoid lookahead bias)
             df_daily_shifted = df_daily.shift(1)
         else:
             logger.warning("Failed to fetch daily data for trend filtering.")
@@ -196,31 +345,79 @@ class BacktestEngine:
 
         logger.info("Starting Multi-Asset Simulation...")
 
-        def get_dynamic_margin():
-            if config.COMPOUND_MODE:
-                return self.current_balance * config.TIER_MARGIN_PCT
-            return config.TIER_1_MARGIN
+        leverage = self.params['LEVERAGE']
+        tp_roi = self.params['TP_MARGIN_ROI']
+        sl_roi = self.params['SL_MARGIN_ROI']
+        sl_cap = self.params['SL_GLOBAL_CAP_PCT']
+        trailing_activate = self.params['TRAILING_TP_ACTIVATE_ROI']
+        trailing_callback = self.params['TRAILING_TP_CALLBACK_ROI']
+        max_trades = self.params['MAX_ACTIVE_TRADES']
+        cooldown_min = self.params['COOLDOWN_CANDLES']
 
-        # Start from index 20
-        for i in range(20, len(common_timestamps)):
+        def get_dynamic_margin():
+            if self.params['COMPOUND_MODE']:
+                return self.current_balance * self.params['TIER_MARGIN_PCT']
+            return self.params['TIER_1_MARGIN']
+
+        # Funding rate tracking
+        last_funding_hour = -1
+        funding_interval = self.params['FUNDING_INTERVAL_HOURS']
+
+        # Track current month for snapshots
+        current_month = None
+
+        # Start from index 30 so the first 30 candles are used only for warm-up.
+        # Trade decisions begin only after indicators and rolling filters are stable.
+        for i in range(30, len(common_timestamps)):
             timestamp = common_timestamps.iloc[i]
+
+            # Monthly balance snapshot + circuit breaker
+            ts_month = timestamp.to_period('M')
+            if current_month is not None and ts_month != current_month:
+                # Record end-of-month balance
+                self.monthly_balances[str(current_month)] = self.current_balance
+                # Reset circuit breaker for new month
+                self.month_start_balance = self.current_balance
+                self.monthly_circuit_breaker_active = False
+            current_month = ts_month
+
+            # Check monthly loss circuit breaker
+            if self.params['ENABLE_MONTHLY_CIRCUIT_BREAKER'] and self.month_start_balance > 0:
+                month_loss_pct = (self.current_balance - self.month_start_balance) / self.month_start_balance
+                if month_loss_pct < self.params['MONTHLY_LOSS_LIMIT_PCT']:
+                    self.monthly_circuit_breaker_active = True
+
+            # Apply funding rate every 8 hours
+            ts_hour = timestamp.hour
+            if self.positions and ts_hour % funding_interval == 0 and ts_hour != last_funding_hour:
+                self.apply_funding_rate(timestamp)
+                last_funding_hour = ts_hour
 
             # Look up current market regime
             current_regime = 'neutral'
             if not df_daily_shifted.empty:
-                # Find the latest daily bar that occurred before or exactly at our current 5m timestamp
                 daily_slice = df_daily_shifted.loc[:timestamp]
                 if not daily_slice.empty:
                     current_regime = self.signal_engine.get_market_regime(daily_slice)
 
-            # 1. Cooldown Check
+            # 1. Cooldown Check (enhanced with candle count)
             symbols_to_remove_cooldown = []
             for symbol, direction in self.cooldown_symbols.items():
-                df_slice = indicators[symbol].loc[:timestamp]
-                if self.signal_engine.evaluate_cooldown(df_slice, direction):
-                    symbols_to_remove_cooldown.append(symbol)
+                # Increment cooldown counter
+                if symbol in self.cooldown_candle_count:
+                    self.cooldown_candle_count[symbol] += 1
+
+                # Must wait minimum candles AND market must stabilize
+                candles_waited = self.cooldown_candle_count.get(symbol, 0)
+                if candles_waited >= cooldown_min:
+                    df_slice = indicators[symbol].loc[:timestamp]
+                    if self.signal_engine.evaluate_cooldown(df_slice, direction):
+                        symbols_to_remove_cooldown.append(symbol)
+
             for symbol in symbols_to_remove_cooldown:
                 del self.cooldown_symbols[symbol]
+                if symbol in self.cooldown_candle_count:
+                    del self.cooldown_candle_count[symbol]
 
             # 2. Position Management
             for symbol in list(self.positions.keys()):
@@ -228,79 +425,295 @@ class BacktestEngine:
                 current_price = row['close']
                 pos = self.positions[symbol]
                 direction = pos['direction']
+                df_hourly_slice = indicators_hourly.get(symbol, pd.DataFrame()).loc[:timestamp] if symbol in indicators_hourly else pd.DataFrame()
 
-                # Check SL and TP (using appropriate high/low based on direction)
                 if direction == 'long':
-                    # Longs suffer on Lows, profit on Highs
                     worst_price = row['low']
                     best_price = row['high']
                 else:
-                    # Shorts suffer on Highs, profit on Lows
                     worst_price = row['high']
                     best_price = row['low']
 
-                if config.COMPOUND_MODE:
-                    target_tp = pos['margin_usdt'] * config.TP_MARGIN_ROI
-                    margin_sl = pos['margin_usdt'] * config.SL_MARGIN_ROI
-                    global_cap_sl = self.current_balance * config.SL_GLOBAL_CAP_PCT
+                if self.params['COMPOUND_MODE']:
+                    # Dynamic ATR-based TP/SL
+                    if self.params.get('DYNAMIC_TPSL', False) and pos.get('entry_atr') and pos['entry_atr'] > 0:
+                        avg_price = self.get_avg_price(symbol)
+                        if avg_price > 0:
+                            atr = pos['entry_atr']
+                            leverage_val = self.params['LEVERAGE']
+                            # ATR-based TP/SL as ROI on margin
+                            # price_move = ATR * multiplier
+                            # ROI = (price_move / avg_price) * leverage
+                            tp_roi_raw = (atr * self.params.get('ATR_TP_MULT', 2.0) / avg_price) * leverage_val
+                            sl_roi_raw = -((atr * self.params.get('ATR_SL_MULT', 1.5) / avg_price) * leverage_val)
+                            # Clamp to min/max bounds
+                            tp_roi_clamped = max(self.params.get('ATR_TP_MIN_ROI', 0.08),
+                                                 min(tp_roi_raw, self.params.get('ATR_TP_MAX_ROI', 0.40)))
+                            sl_roi_clamped = min(self.params.get('ATR_SL_MIN_ROI', -0.15),
+                                                 max(sl_roi_raw, self.params.get('ATR_SL_MAX_ROI', -0.70)))
+                            target_tp = pos['margin_usdt'] * tp_roi_clamped
+                            margin_sl = pos['margin_usdt'] * sl_roi_clamped
+                        else:
+                            target_tp = pos['margin_usdt'] * tp_roi
+                            margin_sl = pos['margin_usdt'] * sl_roi
+                    else:
+                        target_tp = pos['margin_usdt'] * tp_roi
+                        margin_sl = pos['margin_usdt'] * sl_roi
+                    global_cap_sl = self.current_balance * sl_cap
                     target_sl = max(margin_sl, global_cap_sl)
                 else:
-                    target_tp = config.TP_NET_PROFIT
-                    target_sl = config.SL_MAX_LOSS
+                    target_tp = self.params['TP_NET_PROFIT']
+                    target_sl = self.params['SL_MAX_LOSS']
 
+                # Check Stop Loss
                 sl_pnl = self.calculate_pnl(symbol, worst_price)
                 if sl_pnl <= target_sl:
-                    exec_price = worst_price * (0.9995 if direction == 'long' else 1.0005) # slippage
+                    exec_price = worst_price * (0.9995 if direction == 'long' else 1.0005)
                     self.close_position(symbol, exec_price, timestamp, is_tp=False)
                     continue
 
+                df_slice = indicators[symbol].loc[:timestamp]
+                if pos.get('entry_style') == 'donchian' and self.signal_engine.should_exit_trend_position(
+                    df_slice, df_hourly_slice, direction
+                ):
+                    exec_price = current_price * (0.9995 if direction == 'long' else 1.0005)
+                    self.close_position(symbol, exec_price, timestamp, is_tp=True, reason_detail='TREND_EXIT')
+                    continue
+
+                # Check trailing take-profit
+                best_pnl = self.calculate_pnl(symbol, best_price)
+                best_roi = best_pnl / pos['margin_usdt'] if pos['margin_usdt'] > 0 else 0
+
+                if best_roi >= trailing_activate:
+                    # Update peak
+                    if symbol not in self.trailing_peaks or best_roi > self.trailing_peaks[symbol]:
+                        self.trailing_peaks[symbol] = best_roi
+
+                    # Check if price has pulled back from peak
+                    close_pnl = self.calculate_pnl(symbol, current_price)
+                    close_roi = close_pnl / pos['margin_usdt'] if pos['margin_usdt'] > 0 else 0
+                    peak_roi = self.trailing_peaks.get(symbol, 0)
+
+                    if peak_roi - close_roi >= trailing_callback and close_roi > 0:
+                        exec_price = current_price * (0.9995 if direction == 'long' else 1.0005)
+                        self.close_position(symbol, exec_price, timestamp, is_tp=True, reason_detail='TRAILING_TP')
+                        continue
+
+                # Check fixed Take Profit
                 tp_pnl = self.calculate_pnl(symbol, best_price)
                 if tp_pnl >= target_tp:
-                    exec_price = best_price * (0.9995 if direction == 'long' else 1.0005) # slippage
+                    exec_price = best_price * (0.9995 if direction == 'long' else 1.0005)
                     self.close_position(symbol, exec_price, timestamp, is_tp=True)
                     continue
 
-                # Check Tiers using Close
+                # Check Tier upgrades using Close
                 pos = self.positions.get(symbol)
-                if pos: # Might have been closed above
+                if pos:
                     avg_price = self.get_avg_price(symbol)
-                    df_slice = indicators[symbol].loc[:timestamp]
                     margin_to_use = get_dynamic_margin()
 
-                    if pos['tier'] == 1:
-                        if self.signal_engine.check_tier_2_signal(current_price, avg_price, config.TIER_2_DEV_PCT, direction, df_slice):
-                            exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
-                            self.execute_order(symbol, margin_to_use, exec_price, timestamp, 2, direction)
-                    elif pos['tier'] == 2:
-                        if self.signal_engine.check_tier_3_signal(current_price, avg_price, config.TIER_3_DEV_PCT, direction):
-                            exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
-                            self.execute_order(symbol, margin_to_use, exec_price, timestamp, 3, direction)
+                    # Get current ATR for DCA tiers
+                    atr_val = None
+                    atr_cols = [c for c in indicators[symbol].columns if c.startswith('ATRr_')]
+                    if atr_cols:
+                        atr_val = row[atr_cols[0]] if atr_cols[0] in row.index else None
+                        if atr_val is not None and pd.isna(atr_val):
+                            atr_val = None
 
-            # 3. Scanning Phase
-            if len(self.positions) < config.MAX_ACTIVE_TRADES:
+                    if pos.get('entry_style') == 'donchian' and self.params.get('ENABLE_TREND_PYRAMIDING'):
+                        max_tier = 1 + int(self.params.get('TREND_PYRAMID_MAX_ADDS', 0))
+                        current_pnl = self.calculate_pnl(symbol, current_price)
+                        current_roi = current_pnl / pos['margin_usdt'] if pos['margin_usdt'] > 0 else 0
+                        if pos['tier'] < max_tier and self.signal_engine.check_trend_pyramid_signal(
+                            current_price=current_price,
+                            last_add_price=pos.get('last_entry_price'),
+                            direction=direction,
+                            df=df_slice,
+                            df_hourly=df_hourly_slice,
+                            current_roi=current_roi,
+                        ):
+                            exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
+                            self.execute_order(
+                                symbol,
+                                margin_to_use,
+                                exec_price,
+                                timestamp,
+                                pos['tier'] + 1,
+                                direction,
+                                atr_value=atr_val,
+                                entry_style=pos.get('entry_style'),
+                            )
+                    elif pos['tier'] == 1:
+                        tier_2_dev_pct = self.params['TIER_2_DEV_PCT']
+                        if self.params.get('DYNAMIC_TIER_DEVIATIONS') and atr_val and current_price > 0:
+                            tier_2_dev_pct = min(
+                                tier_2_dev_pct,
+                                max(
+                                    self.params['MIN_TIER_DEV_PCT'],
+                                    (atr_val / current_price) * self.params['TIER_2_ATR_DEV_MULT'],
+                                ),
+                            )
+                        if self.signal_engine.check_tier_2_signal(
+                            current_price, avg_price, tier_2_dev_pct, direction, df_slice
+                        ):
+                            exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
+                            self.execute_order(symbol, margin_to_use, exec_price, timestamp, 2, direction, atr_value=atr_val)
+                    elif pos['tier'] == 2:
+                        tier_3_dev_pct = self.params['TIER_3_DEV_PCT']
+                        if self.params.get('DYNAMIC_TIER_DEVIATIONS') and atr_val and current_price > 0:
+                            tier_3_dev_pct = min(
+                                tier_3_dev_pct,
+                                max(
+                                    self.params['MIN_TIER_DEV_PCT'],
+                                    (atr_val / current_price) * self.params['TIER_3_ATR_DEV_MULT'],
+                                ),
+                            )
+                        if self.signal_engine.check_tier_3_signal(
+                            current_price, avg_price, tier_3_dev_pct, direction, df_slice
+                        ):
+                            exec_price = current_price * (1.0005 if direction == 'long' else 0.9995)
+                            self.execute_order(symbol, margin_to_use, exec_price, timestamp, 3, direction, atr_value=atr_val)
+
+            # 3. Scanning Phase (skip if monthly circuit breaker active)
+            signal_mode = self.params.get('SIGNAL_MODE', 'classic')
+            if len(self.positions) < max_trades and not self.monthly_circuit_breaker_active:
                 margin_to_use = get_dynamic_margin()
                 for symbol in self.symbols:
                     if symbol in self.positions or symbol in self.cooldown_symbols:
                         continue
 
+                    # Skip symbols with too many consecutive losses
+                    # Use a time-based reset: consecutive loss counter resets after enough candles
+                    max_consec = self.params['MAX_CONSECUTIVE_LOSSES']
+                    if self.consecutive_losses.get(symbol, 0) >= max_consec:
+                        # Track candles since last loss for non-cooldown symbols
+                        if symbol not in self.cooldown_candle_count:
+                            self.cooldown_candle_count[symbol] = 0
+                        self.cooldown_candle_count[symbol] += 1
+                        cooldown_reset_mult = self.params['CONSECUTIVE_LOSS_COOLDOWN_MULT']
+                        if self.cooldown_candle_count.get(symbol, 0) > cooldown_min * cooldown_reset_mult:
+                            self.consecutive_losses[symbol] = 0
+                            if symbol in self.cooldown_candle_count:
+                                del self.cooldown_candle_count[symbol]
+                        else:
+                            continue
+
                     df_slice = indicators[symbol].loc[:timestamp]
+                    df_hourly_slice = indicators_hourly.get(symbol, pd.DataFrame()).loc[:timestamp] if symbol in indicators_hourly else pd.DataFrame()
                     current_price = indicators[symbol].loc[timestamp]['close']
 
-                    # Apply Trend Filter: Only go long if bull or neutral, only go short if bear or neutral
+                    # Extract ATR value for dynamic TP/SL
+                    atr_val = None
+                    atr_cols = [c for c in indicators[symbol].columns if c.startswith('ATRr_')]
+                    if atr_cols:
+                        atr_val = indicators[symbol].loc[timestamp][atr_cols[0]]
+                        if pd.isna(atr_val):
+                            atr_val = None
+
+                    # ATR spike entry block: skip this symbol if volatility is extreme
+                    if self.params.get('ENABLE_ATR_SPIKE_BLOCK', False):
+                        atr_ratio_now = self.signal_engine.get_atr_ratio(df_slice)
+                        if atr_ratio_now is not None and atr_ratio_now > self.params.get('ATR_SPIKE_BLOCK_THRESHOLD', 2.0):
+                            continue
+
                     can_go_long = current_regime in ['bull', 'neutral']
                     can_go_short = current_regime in ['bear', 'neutral']
+                    long_signal = False
+                    short_signal = False
+                    entry_style = 'mean_reversion'
 
-                    if can_go_long and self.signal_engine.check_tier_1_long_signal(symbol, df_slice):
+                    if self.params.get('ENABLE_DONCHIAN_BREAKOUT', False):
+                        if current_regime == 'bull' and can_go_long:
+                            if self.signal_engine.check_donchian_long_signal(symbol, df_slice, df_hourly_slice):
+                                long_signal = True
+                                entry_style = 'donchian'
+                        elif current_regime == 'bear' and can_go_short:
+                            if self.signal_engine.check_donchian_short_signal(symbol, df_slice, df_hourly_slice):
+                                short_signal = True
+                                entry_style = 'donchian'
+
+                    if not long_signal and not short_signal and self.params.get('ENABLE_REGIME_BREAKOUT', False):
+                        if current_regime == 'bull' and can_go_long:
+                            long_signal = (
+                                self.signal_engine.check_breakout_long_signal(symbol, df_slice) or
+                                self.signal_engine.check_tier_1_long_signal(symbol, df_slice, signal_mode)
+                            )
+                        elif current_regime == 'bear' and can_go_short:
+                            short_signal = (
+                                self.signal_engine.check_breakout_short_signal(symbol, df_slice) or
+                                self.signal_engine.check_tier_1_short_signal(symbol, df_slice, signal_mode)
+                            )
+                        else:
+                            if can_go_long:
+                                long_signal = self.signal_engine.check_tier_1_long_signal(symbol, df_slice, signal_mode)
+                            if not long_signal and can_go_short:
+                                short_signal = self.signal_engine.check_tier_1_short_signal(symbol, df_slice, signal_mode)
+                    else:
+                        if can_go_long:
+                            long_signal = self.signal_engine.check_tier_1_long_signal(symbol, df_slice, signal_mode)
+                        if not long_signal and can_go_short:
+                            short_signal = self.signal_engine.check_tier_1_short_signal(symbol, df_slice, signal_mode)
+
+                    if long_signal:
                         exec_price = current_price * 1.0005
-                        self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'long')
-                    elif can_go_short and self.signal_engine.check_tier_1_short_signal(symbol, df_slice):
+                        self.execute_order(
+                            symbol, margin_to_use, exec_price, timestamp, 1, 'long',
+                            atr_value=atr_val, entry_style=entry_style
+                        )
+                    elif short_signal:
                         exec_price = current_price * 0.9995
-                        self.execute_order(symbol, margin_to_use, exec_price, timestamp, 1, 'short')
+                        self.execute_order(
+                            symbol, margin_to_use, exec_price, timestamp, 1, 'short',
+                            atr_value=atr_val, entry_style=entry_style
+                        )
 
-                    if len(self.positions) >= config.MAX_ACTIVE_TRADES:
+                    if len(self.positions) >= max_trades:
                         break
 
+        # Record final month
+        if current_month is not None:
+            self.monthly_balances[str(current_month)] = self.current_balance
+
         self.print_report()
+        return True
+
+    def get_monthly_pnl_report(self):
+        """Returns a list of dicts with monthly performance data."""
+        closed_trades = [t for t in self.trades if t['type'] == 'close']
+        if not closed_trades:
+            return []
+
+        df = pd.DataFrame(closed_trades)
+        df['time'] = pd.to_datetime(df['time'])
+        df['month'] = df['time'].dt.to_period('M')
+
+        monthly_data = []
+        cumulative_pnl = 0.0
+        prev_balance = self.initial_balance
+
+        for month_period, group in df.groupby('month'):
+            month_str = str(month_period)
+            trades_count = len(group)
+            wins = (group['pnl'] > 0).sum()
+            losses = (group['pnl'] <= 0).sum()
+            win_rate = wins / trades_count * 100 if trades_count > 0 else 0
+            net_pnl = group['pnl'].sum()
+            cumulative_pnl += net_pnl
+            end_balance = self.monthly_balances.get(month_str, prev_balance + net_pnl)
+            prev_balance = end_balance
+
+            monthly_data.append({
+                'month': month_str,
+                'trades': trades_count,
+                'wins': wins,
+                'losses': losses,
+                'win_rate': win_rate,
+                'net_pnl': net_pnl,
+                'cumulative_pnl': cumulative_pnl,
+                'end_balance': end_balance,
+            })
+
+        return monthly_data
 
     def print_report(self):
         closed_trades = [t for t in self.trades if t['type'] == 'close']
@@ -322,12 +735,11 @@ class BacktestEngine:
         print(f"Win Rate: {win_rate:.2f}%")
         print(f"Max Drawdown (MDD): {self.max_drawdown*100:.2f}%")
         print(f"Max Margin Usage: {self.max_margin_usage:.2f} USDT")
+        print(f"Skipped Orders: {self.skipped_orders}")
         print("="*40)
-        # Margin safety warning: For compound mode, margin_usage naturally exceeds initial_balance.
-        # What matters is that Max Drawdown hasn't blown up the account.
         if self.max_drawdown > 0.99:
             print("⚠️ WARNING: Max Drawdown hit ~100%. Account would have been liquidated!")
-        elif not config.COMPOUND_MODE and self.max_margin_usage > self.initial_balance:
+        elif not self.params['COMPOUND_MODE'] and self.max_margin_usage > self.initial_balance:
             print("⚠️ WARNING: Fixed margin exceeded initial balance. Account would have been liquidated!")
         else:
             print("✅ Margin safety passed.")

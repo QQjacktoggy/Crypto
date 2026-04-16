@@ -19,21 +19,18 @@ class Config:
 
     # --- Trading Parameters (Futures) ---
     BASE_CAPITAL = 150.0  # USDT
-    MAX_ACTIVE_TRADES = 4 # Allow up to 4 concurrent trades
+    MAX_ACTIVE_TRADES = 5  # Allow up to 5 concurrent trades
 
     # Futures configurations
     LEVERAGE = 5
-    MARGIN_MODE = 'isolated' # Use isolated margin to protect account from total liquidation
+    MARGIN_MODE = 'isolated'
 
     # Target symbols for Binance USDT-M Futures (CCXT syntax for linear futures)
     SYMBOLS = ['BTC/USDT:USDT', 'ETH/USDT:USDT', 'SOL/USDT:USDT', 'DOGE/USDT:USDT', 'XRP/USDT:USDT']
 
     # --- Compound Interest (Reinvesting Profits) ---
     COMPOUND_MODE = True
-    # If True, TIER_MARGIN will be calculated as: current_balance * TIER_MARGIN_PCT
-    # 0.066 represents ~6.6% of account per tier. At 150U, it equals 9.9U.
-    # 4 positions * 3 tiers * 6.6% = 79.2% max utilization of current balance, leaving ~20% buffer.
-    TIER_MARGIN_PCT = 0.066
+    TIER_MARGIN_PCT = 0.055  # ~5.5% per tier; 5 positions * 3 tiers * 5.5% = 82.5% max, ~17.5% buffer
 
     # Capital allocation per tier (USDT Margin) [Used only if COMPOUND_MODE is False]
     TIER_1_MARGIN = 10.0
@@ -41,33 +38,125 @@ class Config:
     TIER_3_MARGIN = 10.0
 
     # Trigger conditions (price deviation % from average entry price)
-    TIER_2_DEV_PCT = 0.015  # 1.5% adverse move
-    TIER_3_DEV_PCT = 0.030  # 3.0% adverse move
+    TIER_2_DEV_PCT = 0.012  # 1.2% adverse move (tighter DCA)
+    TIER_3_DEV_PCT = 0.025  # 2.5% adverse move
 
     # Take Profit & Stop Loss
-    # If COMPOUND_MODE is True, we target a percentage ROI on the invested margin
-    # TP = 15% return on margin. SL = 100% loss of margin
-    TP_MARGIN_ROI = 0.15
-    SL_MARGIN_ROI = -1.0
+    TP_MARGIN_ROI = 0.15    # 15% return on margin
+    SL_MARGIN_ROI = -0.50   # 50% margin loss
+
+    # --- Trailing Take-Profit ---
+    TRAILING_TP_ACTIVATE_ROI = 0.12  # Activate trailing TP after 12% ROI
+    TRAILING_TP_CALLBACK_ROI = 0.04  # Trail 4% behind peak
 
     # --- Absolute Safety Net ---
-    # In COMPOUND_MODE, a 100% margin loss can be devastating when balance is huge.
-    # This caps the maximum loss of a single position to X% of the TOTAL current account balance.
-    # Default is 0.08 (8%). If the margin loss exceeds 8% of the total account, it cuts early.
-    # We found 8% gives the best balance between giving trades room to bounce and protecting capital.
-    SL_GLOBAL_CAP_PCT = -0.08
+    SL_GLOBAL_CAP_PCT = -0.08  # 8% of total account
 
     # Fixed absolute USDT targets [Used only if COMPOUND_MODE is False]
     TP_NET_PROFIT = 1.5
     SL_MAX_LOSS = -10.0
 
     # Technical Indicator Parameters
-    RSI_LONG_ENTRY = 25
-    RSI_SHORT_ENTRY = 75
+    RSI_LONG_ENTRY = 32     # Widened from 25 to capture more opportunities
+    RSI_SHORT_ENTRY = 68    # Widened from 75 to capture more opportunities
     TREND_SMA_LENGTH = 200
+
+    # --- MACD Strategy Parameters ---
+    MACD_FAST = 12
+    MACD_SLOW = 26
+    MACD_SIGNAL = 9
+    MACD_LONG_RSI_MAX = 45
+    MACD_SHORT_RSI_MIN = 55
+
+    # --- EMA Crossover Strategy Parameters ---
+    EMA_FAST = 9
+    EMA_SLOW = 21
+    EMA_LONG_RSI_MAX = 50
+    EMA_SHORT_RSI_MIN = 50
+
+    # --- Funding Rate Simulation ---
+    FUNDING_RATE = 0.0001   # 0.01% every 8 hours (realistic average)
+    FUNDING_INTERVAL_HOURS = 8
 
     # Binance Futures Fee Rate (Maker 0.02%, Taker 0.05%. We use 0.05% for market orders)
     FEE_RATE = 0.0005
+
+    # --- Signal Strategy Mode ---
+    # 'classic': RSI + Bollinger Bands only (original, high win-rate)
+    # 'multi': RSI+BB, MACD, EMA crossover (more trades, potentially more risk)
+    SIGNAL_MODE = 'classic'
+    BB_ENTRY_BUFFER_PCT = 0.0   # Allow entries slightly inside Bollinger band (0.005 = 0.5%)
+    VOLUME_FILTER_MULT = 0.70   # Volume must be >= vol_sma_20 * multiplier
+    VOLATILITY_ADAPTIVE_ENTRY = False
+    ATR_VOL_LOOKBACK = 100
+    HIGH_VOL_THRESHOLD = 1.30
+    LOW_VOL_THRESHOLD = 0.80
+    RSI_LONG_ENTRY_HIGH_VOL = 28
+    RSI_LONG_ENTRY_LOW_VOL = 36
+    RSI_SHORT_ENTRY_HIGH_VOL = 72
+    RSI_SHORT_ENTRY_LOW_VOL = 64
+    ENABLE_REGIME_BREAKOUT = False
+    BREAKOUT_BUFFER_PCT = 0.002
+    BREAKOUT_VOLUME_MULT = 1.10
+    BREAKOUT_LONG_RSI_MIN = 52
+    BREAKOUT_LONG_RSI_MAX = 78
+    BREAKOUT_SHORT_RSI_MIN = 22
+    BREAKOUT_SHORT_RSI_MAX = 48
+    ENABLE_DONCHIAN_BREAKOUT = False
+    DONCHIAN_LENGTH = 20
+    DONCHIAN_BREAKOUT_BUFFER_PCT = 0.001
+    DONCHIAN_VOLUME_MULT = 1.00
+    DONCHIAN_LONG_RSI_MIN = 50
+    DONCHIAN_LONG_RSI_MAX = 82
+    DONCHIAN_SHORT_RSI_MIN = 18
+    DONCHIAN_SHORT_RSI_MAX = 50
+    ENABLE_1H_TREND_FILTER = False
+    HOURLY_EMA_FAST = 12
+    HOURLY_EMA_SLOW = 36
+    ENABLE_TREND_PYRAMIDING = False
+    TREND_PYRAMID_MAX_ADDS = 2
+    TREND_PYRAMID_TRIGGER_ROI = 0.04
+    TREND_PYRAMID_MIN_PULLBACK = 0.0
+    ENABLE_TREND_EXIT = False
+    TREND_EXIT_ON_HOURLY_FLIP = True
+    TREND_EXIT_USE_DONCHIAN_MID = False
+    ENABLE_ADVANCED_TREND_FILTER = False
+    ADVANCED_TREND_ADX_LENGTH = 14
+    ADVANCED_TREND_ADX_THRESHOLD = 20
+    ADVANCED_TREND_SLOPE_LOOKBACK = 3
+    ADVANCED_TREND_SLOPE_MIN = 0.0015
+    ADVANCED_TREND_STRUCTURE_BARS = 3
+
+    # --- Cooldown Settings ---
+    COOLDOWN_CANDLES = 12   # Minimum candles (1 hour) before re-entry after SL
+    MAX_CONSECUTIVE_LOSSES = 3  # Pause symbol after 3 consecutive losses
+    CONSECUTIVE_LOSS_COOLDOWN_MULT = 5
+    ENABLE_MONTHLY_CIRCUIT_BREAKER = True
+    MONTHLY_LOSS_LIMIT_PCT = -0.20
+
+    # --- Dynamic ATR-based TP/SL ---
+    DYNAMIC_TPSL = False         # Use ATR-based dynamic TP/SL instead of fixed ROI
+    ATR_TP_MULT = 2.0            # TP = ATR * multiplier (as price distance)
+    ATR_SL_MULT = 1.5            # SL = ATR * multiplier (as price distance)
+    ATR_TP_MIN_ROI = 0.08        # Minimum TP ROI floor (8%)
+    ATR_TP_MAX_ROI = 0.40        # Maximum TP ROI cap (40%)
+    ATR_SL_MIN_ROI = -0.15       # Minimum SL ROI floor (-15%)
+    ATR_SL_MAX_ROI = -0.70       # Maximum SL ROI cap (-70%)
+    DYNAMIC_TIER_DEVIATIONS = False
+    TIER_2_ATR_DEV_MULT = 2.0    # Convert ATR/current_price into Tier 2 deviation %
+    TIER_3_ATR_DEV_MULT = 3.5    # Convert ATR/current_price into Tier 3 deviation %
+    MIN_TIER_DEV_PCT = 0.004     # Do not allow tiers to trigger too tightly
+    MOMENTUM_GATED_DCA = False
+    TIER_2_MAX_ATR_RATIO = 1.80
+    TIER_3_MAX_ATR_RATIO = 1.50
+    TIER_2_LONG_RSI_MAX = 38
+    TIER_2_SHORT_RSI_MIN = 62
+    TIER_3_LONG_RSI_RECOVERY = 32
+    TIER_3_SHORT_RSI_RECOVERY = 68
+    # ATR spike entry block — when current ATR / median ATR exceeds the threshold,
+    # skip opening new positions for that symbol on that candle.
+    ENABLE_ATR_SPIKE_BLOCK = False
+    ATR_SPIKE_BLOCK_THRESHOLD = 2.0  # e.g. 2.0 means 2× the historical median ATR
 
     # Timeframes
     TIMEFRAME = '5m'

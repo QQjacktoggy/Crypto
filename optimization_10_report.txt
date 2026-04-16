@@ -1,0 +1,387 @@
+10-Iteration Focused Backtest Optimization Report
+Generated: 2026-04-16 08:03:26
+Initial Capital: 150.0 USDT
+Backtest Period: 365 days
+Symbols: BTC/USDT:USDT, ETH/USDT:USDT, SOL/USDT:USDT, DOGE/USDT:USDT, XRP/USDT:USDT
+======================================================================
+
+============================================================
+ITERATION #1 - Conservative-A
+============================================================
+Parameters:
+  RSI Long/Short: 28/72
+  TP/SL ROI: 12% / -30%
+  Leverage: 5x
+  Tier Margin: 4.5%
+  Trailing TP: 10%/3%
+  DCA: T2=1.2% / T3=2.5%
+  Max Trades: 4 | Cooldown: 12
+  Signal Mode: classic
+  SL Global Cap: -6.0%
+
+Results:
+  Initial: 150.00 USDT
+  Final: 89.29 USDT
+  Total PnL: -61.19 USDT
+  Trades: 92 | Win Rate: 72.8%
+  Max Drawdown: 57.3%
+  Avg Monthly PnL: -4.71 USDT
+  Months >= 40 USDT: 0/13
+
+Monthly Breakdown:
+  [2025-04] ❌ PnL: -7.37 | Trades: 11 (9W/2L) | WR: 82% | Balance: 142.69
+  [2025-05] ❌ PnL: -9.77 | Trades: 3 (1W/2L) | WR: 33% | Balance: 132.99
+  [2025-06] ⚠️ PnL: +4.26 | Trades: 4 (4W/0L) | WR: 100% | Balance: 137.29
+  [2025-07] ⚠️ PnL: +7.25 | Trades: 4 (4W/0L) | WR: 100% | Balance: 144.54
+  [2025-08] ❌ PnL: -1.06 | Trades: 3 (2W/1L) | WR: 67% | Balance: 143.48
+  [2025-09] ❌ PnL: -9.50 | Trades: 4 (2W/2L) | WR: 50% | Balance: 134.11
+  [2025-10] ❌ PnL: -9.60 | Trades: 18 (14W/4L) | WR: 78% | Balance: 124.51
+  [2025-11] ❌ PnL: -18.41 | Trades: 8 (4W/4L) | WR: 50% | Balance: 106.11
+  [2025-12] ❌ PnL: -1.49 | Trades: 7 (4W/3L) | WR: 57% | Balance: 104.70
+  [2026-01] ❌ PnL: -20.86 | Trades: 4 (0W/4L) | WR: 0% | Balance: 83.91
+  [2026-02] ❌ PnL: -0.95 | Trades: 18 (15W/3L) | WR: 83% | Balance: 82.97
+  [2026-03] ⚠️ PnL: +2.99 | Trades: 4 (4W/0L) | WR: 100% | Balance: 85.97
+  [2026-04] ⚠️ PnL: +3.31 | Trades: 4 (4W/0L) | WR: 100% | Balance: 89.29
+
+============================================================
+ITERATION #2 - Conservative-B
+============================================================
+Parameters:
+  RSI Long/Short: 32/68
+  TP/SL ROI: 15% / -40%
+  Leverage: 5x
+  Tier Margin: 5.0%
+  Trailing TP: 12%/4%
+  DCA: T2=1.2% / T3=2.5%
+  Max Trades: 5 | Cooldown: 12
+  Signal Mode: classic
+  SL Global Cap: -8.0%
+
+Results:
+  Initial: 150.00 USDT
+  Final: 87.65 USDT
+  Total PnL: -63.10 USDT
+  Trades: 85 | Win Rate: 75.3%
+  Max Drawdown: 66.1%
+  Avg Monthly PnL: -4.85 USDT
+  Months >= 40 USDT: 0/13
+
+Monthly Breakdown:
+  [2025-04] ❌ PnL: -1.14 | Trades: 8 (7W/1L) | WR: 88% | Balance: 148.89
+  [2025-05] ❌ PnL: -15.29 | Trades: 3 (1W/2L) | WR: 33% | Balance: 133.70
+  [2025-06] ⚠️ PnL: +5.77 | Trades: 4 (4W/0L) | WR: 100% | Balance: 139.52
+  [2025-07] ⚠️ PnL: +8.27 | Trades: 4 (4W/0L) | WR: 100% | Balance: 147.79
+  [2025-08] ⚠️ PnL: +8.89 | Trades: 3 (3W/0L) | WR: 100% | Balance: 156.68
+  [2025-09] ❌ PnL: -11.95 | Trades: 3 (1W/2L) | WR: 33% | Balance: 126.78
+  [2025-10] ❌ PnL: -24.52 | Trades: 20 (14W/6L) | WR: 70% | Balance: 120.56
+  [2025-11] ❌ PnL: -29.99 | Trades: 8 (4W/4L) | WR: 50% | Balance: 90.59
+  [2025-12] ⚠️ PnL: +0.76 | Trades: 7 (5W/2L) | WR: 71% | Balance: 91.45
+  [2026-01] ❌ PnL: -21.80 | Trades: 4 (0W/4L) | WR: 0% | Balance: 69.71
+  [2026-02] ⚠️ PnL: +8.52 | Trades: 12 (12W/0L) | WR: 100% | Balance: 78.23
+  [2026-03] ⚠️ PnL: +5.18 | Trades: 5 (5W/0L) | WR: 100% | Balance: 83.43
+  [2026-04] ⚠️ PnL: +4.20 | Trades: 4 (4W/0L) | WR: 100% | Balance: 87.65
+
+============================================================
+ITERATION #3 - Conservative-C
+============================================================
+Parameters:
+  RSI Long/Short: 30/70
+  TP/SL ROI: 18% / -50%
+  Leverage: 5x
+  Tier Margin: 5.5%
+  Trailing TP: 10%/3%
+  DCA: T2=1.5% / T3=3.0%
+  Max Trades: 5 | Cooldown: 8
+  Signal Mode: classic
+  SL Global Cap: -8.0%
+
+Results:
+  Initial: 150.00 USDT
+  Final: 123.76 USDT
+  Total PnL: -27.11 USDT
+  Trades: 81 | Win Rate: 85.2%
+  Max Drawdown: 53.2%
+  Avg Monthly PnL: -2.09 USDT
+  Months >= 40 USDT: 0/13
+
+Monthly Breakdown:
+  [2025-04] ❌ PnL: -5.88 | Trades: 8 (7W/1L) | WR: 88% | Balance: 144.14
+  [2025-05] ❌ PnL: -17.66 | Trades: 3 (1W/2L) | WR: 33% | Balance: 126.64
+  [2025-06] ⚠️ PnL: +4.00 | Trades: 4 (4W/0L) | WR: 100% | Balance: 130.68
+  [2025-07] ⚠️ PnL: +8.85 | Trades: 4 (4W/0L) | WR: 100% | Balance: 139.53
+  [2025-08] ⚠️ PnL: +7.61 | Trades: 3 (3W/0L) | WR: 100% | Balance: 147.14
+  [2025-09] ❌ PnL: -8.86 | Trades: 3 (2W/1L) | WR: 67% | Balance: 117.57
+  [2025-10] ❌ PnL: -12.63 | Trades: 19 (16W/3L) | WR: 84% | Balance: 125.90
+  [2025-11] ⚠️ PnL: +6.00 | Trades: 4 (4W/0L) | WR: 100% | Balance: 131.91
+  [2025-12] ❌ PnL: -2.65 | Trades: 7 (5W/2L) | WR: 71% | Balance: 129.41
+  [2026-01] ❌ PnL: -26.43 | Trades: 4 (1W/3L) | WR: 25% | Balance: 103.16
+  [2026-02] ⚠️ PnL: +9.43 | Trades: 13 (13W/0L) | WR: 100% | Balance: 112.59
+  [2026-03] ⚠️ PnL: +5.71 | Trades: 5 (5W/0L) | WR: 100% | Balance: 118.32
+  [2026-04] ⚠️ PnL: +5.42 | Trades: 4 (4W/0L) | WR: 100% | Balance: 123.76
+
+============================================================
+ITERATION #4 - Balanced-A
+============================================================
+Parameters:
+  RSI Long/Short: 32/68
+  TP/SL ROI: 15% / -50%
+  Leverage: 5x
+  Tier Margin: 5.5%
+  Trailing TP: 12%/4%
+  DCA: T2=1.2% / T3=2.5%
+  Max Trades: 5 | Cooldown: 12
+  Signal Mode: multi
+  SL Global Cap: -8.0%
+
+Results:
+  Initial: 150.00 USDT
+  Final: 112.93 USDT
+  Total PnL: -38.07 USDT
+  Trades: 65 | Win Rate: 76.9%
+  Max Drawdown: 58.6%
+  Avg Monthly PnL: -2.93 USDT
+  Months >= 40 USDT: 0/13
+
+Monthly Breakdown:
+  [2025-04] ⚠️ PnL: +5.53 | Trades: 4 (4W/0L) | WR: 100% | Balance: 155.54
+  [2025-05] ❌ PnL: -17.83 | Trades: 3 (1W/2L) | WR: 33% | Balance: 137.89
+  [2025-06] ⚠️ PnL: +6.46 | Trades: 4 (4W/0L) | WR: 100% | Balance: 144.39
+  [2025-07] ⚠️ PnL: +9.59 | Trades: 3 (3W/0L) | WR: 100% | Balance: 153.98
+  [2025-08] ⚠️ PnL: +9.94 | Trades: 3 (3W/0L) | WR: 100% | Balance: 163.92
+  [2025-09] ❌ PnL: -18.95 | Trades: 4 (1W/3L) | WR: 25% | Balance: 126.30
+  [2025-10] ❌ PnL: -19.84 | Trades: 16 (12W/4L) | WR: 75% | Balance: 125.54
+  [2025-11] ⚠️ PnL: +6.32 | Trades: 4 (4W/0L) | WR: 100% | Balance: 131.88
+  [2025-12] ⚠️ PnL: +0.45 | Trades: 7 (5W/2L) | WR: 71% | Balance: 132.49
+  [2026-01] ❌ PnL: -35.46 | Trades: 4 (0W/4L) | WR: 0% | Balance: 97.16
+  [2026-02] ⚠️ PnL: +4.23 | Trades: 5 (5W/0L) | WR: 100% | Balance: 101.39
+  [2026-03] ⚠️ PnL: +5.59 | Trades: 4 (4W/0L) | WR: 100% | Balance: 107.01
+  [2026-04] ⚠️ PnL: +5.89 | Trades: 4 (4W/0L) | WR: 100% | Balance: 112.93
+
+============================================================
+ITERATION #5 - Balanced-B
+============================================================
+Parameters:
+  RSI Long/Short: 35/65
+  TP/SL ROI: 15% / -40%
+  Leverage: 7x
+  Tier Margin: 5.0%
+  Trailing TP: 12%/4%
+  DCA: T2=1.0% / T3=2.0%
+  Max Trades: 4 | Cooldown: 12
+  Signal Mode: multi
+  SL Global Cap: -10.0%
+
+Results:
+  Initial: 150.00 USDT
+  Final: 93.26 USDT
+  Total PnL: -57.31 USDT
+  Trades: 77 | Win Rate: 74.0%
+  Max Drawdown: 66.8%
+  Avg Monthly PnL: -4.41 USDT
+  Months >= 40 USDT: 0/13
+
+Monthly Breakdown:
+  [2025-04] ❌ PnL: -5.93 | Trades: 5 (4W/1L) | WR: 80% | Balance: 144.11
+  [2025-05] ⚠️ PnL: +7.35 | Trades: 3 (3W/0L) | WR: 100% | Balance: 151.53
+  [2025-06] ⚠️ PnL: +5.11 | Trades: 4 (4W/0L) | WR: 100% | Balance: 156.67
+  [2025-07] ⚠️ PnL: +16.96 | Trades: 4 (4W/0L) | WR: 100% | Balance: 173.63
+  [2025-08] ❌ PnL: -2.00 | Trades: 3 (2W/1L) | WR: 67% | Balance: 171.64
+  [2025-09] ❌ PnL: -27.84 | Trades: 4 (1W/3L) | WR: 25% | Balance: 144.03
+  [2025-10] ⚠️ PnL: +12.64 | Trades: 9 (9W/0L) | WR: 100% | Balance: 156.66
+  [2025-11] ❌ PnL: -36.53 | Trades: 8 (4W/4L) | WR: 50% | Balance: 120.15
+  [2025-12] ❌ PnL: -12.68 | Trades: 7 (3W/4L) | WR: 43% | Balance: 107.53
+  [2026-01] ❌ PnL: -21.22 | Trades: 4 (0W/4L) | WR: 0% | Balance: 86.36
+  [2026-02] ❌ PnL: -3.28 | Trades: 18 (15W/3L) | WR: 83% | Balance: 83.10
+  [2026-03] ⚠️ PnL: +4.91 | Trades: 4 (4W/0L) | WR: 100% | Balance: 88.02
+  [2026-04] ⚠️ PnL: +5.21 | Trades: 4 (4W/0L) | WR: 100% | Balance: 93.26
+
+============================================================
+ITERATION #6 - Balanced-C
+============================================================
+Parameters:
+  RSI Long/Short: 30/70
+  TP/SL ROI: 20% / -60%
+  Leverage: 5x
+  Tier Margin: 5.0%
+  Trailing TP: 15%/5%
+  DCA: T2=1.5% / T3=3.0%
+  Max Trades: 5 | Cooldown: 18
+  Signal Mode: multi
+  SL Global Cap: -10.0%
+
+Results:
+  Initial: 150.00 USDT
+  Final: 71.02 USDT
+  Total PnL: -69.50 USDT
+  Trades: 77 | Win Rate: 74.0%
+  Max Drawdown: 70.6%
+  Avg Monthly PnL: -5.35 USDT
+  Months >= 40 USDT: 0/13
+
+Monthly Breakdown:
+  [2025-04] ⚠️ PnL: +4.93 | Trades: 3 (3W/0L) | WR: 100% | Balance: 118.00
+  [2025-05] ❌ PnL: -26.30 | Trades: 5 (2W/3L) | WR: 40% | Balance: 112.69
+  [2025-06] ⚠️ PnL: +9.56 | Trades: 4 (4W/0L) | WR: 100% | Balance: 122.46
+  [2025-07] ❌ PnL: -1.88 | Trades: 4 (3W/1L) | WR: 75% | Balance: 136.95
+  [2025-08] ⚠️ PnL: +10.97 | Trades: 4 (4W/0L) | WR: 100% | Balance: 147.92
+  [2025-09] ❌ PnL: -22.32 | Trades: 4 (1W/3L) | WR: 25% | Balance: 109.60
+  [2025-10] ❌ PnL: -37.25 | Trades: 15 (9W/6L) | WR: 60% | Balance: 88.73
+  [2025-11] ❌ PnL: -6.99 | Trades: 7 (5W/2L) | WR: 71% | Balance: 81.74
+  [2025-12] ❌ PnL: -3.73 | Trades: 6 (4W/2L) | WR: 67% | Balance: 78.11
+  [2026-01] ❌ PnL: -10.03 | Trades: 4 (2W/2L) | WR: 50% | Balance: 68.20
+  [2026-02] ⚠️ PnL: +11.29 | Trades: 12 (12W/0L) | WR: 100% | Balance: 79.50
+  [2026-03] ❌ PnL: -1.29 | Trades: 5 (4W/1L) | WR: 80% | Balance: 78.28
+  [2026-04] ⚠️ PnL: +3.54 | Trades: 4 (4W/0L) | WR: 100% | Balance: 71.02
+
+============================================================
+ITERATION #7 - Aggressive-A
+============================================================
+Parameters:
+  RSI Long/Short: 35/65
+  TP/SL ROI: 12% / -30%
+  Leverage: 10x
+  Tier Margin: 4.5%
+  Trailing TP: 10%/3%
+  DCA: T2=1.0% / T3=2.0%
+  Max Trades: 4 | Cooldown: 8
+  Signal Mode: multi
+  SL Global Cap: -6.0%
+
+Results:
+  Initial: 150.00 USDT
+  Final: 92.91 USDT
+  Total PnL: -57.47 USDT
+  Trades: 89 | Win Rate: 70.8%
+  Max Drawdown: 60.5%
+  Avg Monthly PnL: -4.42 USDT
+  Months >= 40 USDT: 0/13
+
+Monthly Breakdown:
+  [2025-04] ⚠️ PnL: +5.64 | Trades: 7 (7W/0L) | WR: 100% | Balance: 155.66
+  [2025-05] ⚠️ PnL: +4.42 | Trades: 5 (4W/1L) | WR: 80% | Balance: 160.14
+  [2025-06] ⚠️ PnL: +5.13 | Trades: 4 (4W/0L) | WR: 100% | Balance: 165.29
+  [2025-07] ⚠️ PnL: +9.81 | Trades: 4 (4W/0L) | WR: 100% | Balance: 175.10
+  [2025-08] ❌ PnL: -12.58 | Trades: 3 (1W/2L) | WR: 33% | Balance: 162.52
+  [2025-09] ❌ PnL: -8.55 | Trades: 5 (3W/2L) | WR: 60% | Balance: 154.10
+  [2025-10] ⚠️ PnL: +8.31 | Trades: 9 (9W/0L) | WR: 100% | Balance: 162.41
+  [2025-11] ❌ PnL: -24.50 | Trades: 9 (4W/5L) | WR: 44% | Balance: 137.94
+  [2025-12] ❌ PnL: -18.64 | Trades: 8 (3W/5L) | WR: 38% | Balance: 119.33
+  [2026-01] ❌ PnL: -17.72 | Trades: 4 (0W/4L) | WR: 0% | Balance: 101.64
+  [2026-02] ❌ PnL: -2.91 | Trades: 23 (19W/4L) | WR: 83% | Balance: 98.75
+  [2026-03] ❌ PnL: -7.60 | Trades: 4 (1W/3L) | WR: 25% | Balance: 91.15
+  [2026-04] ⚠️ PnL: +1.73 | Trades: 4 (4W/0L) | WR: 100% | Balance: 92.91
+
+============================================================
+ITERATION #8 - Aggressive-B
+============================================================
+Parameters:
+  RSI Long/Short: 28/72
+  TP/SL ROI: 20% / -40%
+  Leverage: 10x
+  Tier Margin: 4.0%
+  Trailing TP: 15%/5%
+  DCA: T2=1.0% / T3=2.5%
+  Max Trades: 4 | Cooldown: 12
+  Signal Mode: classic
+  SL Global Cap: -8.0%
+
+Results:
+  Initial: 150.00 USDT
+  Final: 141.75 USDT
+  Total PnL: -9.22 USDT
+  Trades: 250 | Win Rate: 77.2%
+  Max Drawdown: 74.3%
+  Avg Monthly PnL: -0.71 USDT
+  Months >= 40 USDT: 2/13
+
+Monthly Breakdown:
+  [2025-04] ✅ PnL: +49.36 | Trades: 53 (47W/6L) | WR: 89% | Balance: 158.41
+  [2025-05] ✅ PnL: +71.58 | Trades: 72 (57W/15L) | WR: 79% | Balance: 195.88
+  [2025-06] ❌ PnL: -55.54 | Trades: 48 (34W/14L) | WR: 71% | Balance: 215.92
+  [2025-07] ⚠️ PnL: +18.00 | Trades: 4 (4W/0L) | WR: 100% | Balance: 233.92
+  [2025-08] ❌ PnL: -33.34 | Trades: 3 (0W/3L) | WR: 0% | Balance: 200.59
+  [2025-09] ❌ PnL: -14.73 | Trades: 4 (2W/2L) | WR: 50% | Balance: 186.01
+  [2025-10] ⚠️ PnL: +18.14 | Trades: 16 (15W/1L) | WR: 94% | Balance: 204.16
+  [2025-11] ❌ PnL: -46.60 | Trades: 8 (4W/4L) | WR: 50% | Balance: 157.59
+  [2025-12] ❌ PnL: -7.21 | Trades: 10 (5W/5L) | WR: 50% | Balance: 150.49
+  [2026-01] ❌ PnL: -26.94 | Trades: 4 (0W/4L) | WR: 0% | Balance: 123.58
+  [2026-02] ⚠️ PnL: +3.53 | Trades: 20 (17W/3L) | WR: 85% | Balance: 127.15
+  [2026-03] ⚠️ PnL: +6.29 | Trades: 4 (4W/0L) | WR: 100% | Balance: 133.46
+  [2026-04] ⚠️ PnL: +8.25 | Trades: 4 (4W/0L) | WR: 100% | Balance: 141.75
+
+============================================================
+ITERATION #9 - Aggressive-C
+============================================================
+Parameters:
+  RSI Long/Short: 32/68
+  TP/SL ROI: 18% / -50%
+  Leverage: 7x
+  Tier Margin: 5.5%
+  Trailing TP: 12%/4%
+  DCA: T2=1.2% / T3=2.5%
+  Max Trades: 5 | Cooldown: 8
+  Signal Mode: multi
+  SL Global Cap: -12.0%
+
+Results:
+  Initial: 150.00 USDT
+  Final: 129.28 USDT
+  Total PnL: -21.86 USDT
+  Trades: 70 | Win Rate: 84.3%
+  Max Drawdown: 60.5%
+  Avg Monthly PnL: -1.68 USDT
+  Months >= 40 USDT: 0/13
+
+Monthly Breakdown:
+  [2025-04] ⚠️ PnL: +5.25 | Trades: 4 (4W/0L) | WR: 100% | Balance: 155.26
+  [2025-05] ⚠️ PnL: +4.06 | Trades: 3 (3W/0L) | WR: 100% | Balance: 159.41
+  [2025-06] ⚠️ PnL: +4.87 | Trades: 4 (4W/0L) | WR: 100% | Balance: 164.32
+  [2025-07] ⚠️ PnL: +15.27 | Trades: 3 (3W/0L) | WR: 100% | Balance: 179.59
+  [2025-08] ⚠️ PnL: +11.82 | Trades: 3 (3W/0L) | WR: 100% | Balance: 191.41
+  [2025-09] ❌ PnL: -22.75 | Trades: 4 (2W/2L) | WR: 50% | Balance: 143.47
+  [2025-10] ❌ PnL: -17.53 | Trades: 21 (18W/3L) | WR: 86% | Balance: 151.61
+  [2025-11] ⚠️ PnL: +10.07 | Trades: 4 (4W/0L) | WR: 100% | Balance: 161.70
+  [2025-12] ⚠️ PnL: +0.53 | Trades: 7 (5W/2L) | WR: 71% | Balance: 162.50
+  [2026-01] ❌ PnL: -54.00 | Trades: 4 (0W/4L) | WR: 0% | Balance: 108.66
+  [2026-02] ⚠️ PnL: +4.30 | Trades: 5 (5W/0L) | WR: 100% | Balance: 112.96
+  [2026-03] ⚠️ PnL: +7.67 | Trades: 4 (4W/0L) | WR: 100% | Balance: 120.67
+  [2026-04] ⚠️ PnL: +8.57 | Trades: 4 (4W/0L) | WR: 100% | Balance: 129.28
+
+============================================================
+ITERATION #10 - Hybrid-BestGuess
+============================================================
+Parameters:
+  RSI Long/Short: 32/68
+  TP/SL ROI: 15% / -50%
+  Leverage: 7x
+  Tier Margin: 5.5%
+  Trailing TP: 12%/4%
+  DCA: T2=1.2% / T3=2.5%
+  Max Trades: 5 | Cooldown: 12
+  Signal Mode: multi
+  SL Global Cap: -8.0%
+
+Results:
+  Initial: 150.00 USDT
+  Final: 131.27 USDT
+  Total PnL: -19.57 USDT
+  Trades: 59 | Win Rate: 81.4%
+  Max Drawdown: 57.2%
+  Avg Monthly PnL: -1.51 USDT
+  Months >= 40 USDT: 0/13
+
+Monthly Breakdown:
+  [2025-04] ⚠️ PnL: +5.78 | Trades: 4 (4W/0L) | WR: 100% | Balance: 155.79
+  [2025-05] ⚠️ PnL: +4.67 | Trades: 3 (3W/0L) | WR: 100% | Balance: 160.54
+  [2025-06] ⚠️ PnL: +4.71 | Trades: 4 (4W/0L) | WR: 100% | Balance: 165.29
+  [2025-07] ⚠️ PnL: +15.36 | Trades: 3 (3W/0L) | WR: 100% | Balance: 180.65
+  [2025-08] ❌ PnL: -1.66 | Trades: 3 (2W/1L) | WR: 67% | Balance: 178.99
+  [2025-09] ❌ PnL: -30.54 | Trades: 5 (2W/3L) | WR: 40% | Balance: 148.77
+  [2025-10] ⚠️ PnL: +12.80 | Trades: 9 (9W/0L) | WR: 100% | Balance: 161.57
+  [2025-11] ⚠️ PnL: +10.44 | Trades: 4 (4W/0L) | WR: 100% | Balance: 172.04
+  [2025-12] ❌ PnL: -7.87 | Trades: 7 (4W/3L) | WR: 57% | Balance: 164.29
+  [2026-01] ❌ PnL: -52.80 | Trades: 4 (0W/4L) | WR: 0% | Balance: 111.65
+  [2026-02] ⚠️ PnL: +3.93 | Trades: 5 (5W/0L) | WR: 100% | Balance: 115.58
+  [2026-03] ⚠️ PnL: +8.10 | Trades: 4 (4W/0L) | WR: 100% | Balance: 123.72
+  [2026-04] ⚠️ PnL: +7.51 | Trades: 4 (4W/0L) | WR: 100% | Balance: 131.27
+
