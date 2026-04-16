@@ -32,13 +32,35 @@ nano .env
 ```
 Paste your credentials:
 ```env
-API_KEY=your_cryptocom_api_key
-API_SECRET=your_cryptocom_api_secret
+API_KEY=your_binance_api_key
+API_SECRET=your_binance_api_secret
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 TELEGRAM_CHAT_ID=your_telegram_chat_id
 ```
 
-### 4. Build and Run using Docker Compose
+### 4. Verify Environment (Recommended)
+Before deploying, verify that your API credentials and Binance Futures connection work correctly:
+
+```bash
+# Install dependencies first (if not using Docker)
+pip install -r requirements.txt
+
+# Verify connection to Binance Mainnet
+python verify_env.py
+
+# Or verify connection to Binance Testnet
+python verify_env.py --testnet
+```
+
+A successful run will show:
+```
+✅ API Key and Secret found in environment variables.
+✅ Successfully loaded N markets.
+✅ Successfully authenticated! Current USDT free balance: X.XX
+--- Environment Verification Completed Successfully ---
+```
+
+### 5. Build and Run using Docker Compose
 Create a `docker-compose.yml` file in the root if you prefer, or build directly:
 
 #### Option A: Direct Docker Run
